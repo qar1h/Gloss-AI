@@ -6,6 +6,7 @@ import { onSelectionChange, type SelectionInfo } from './ui/selection';
 import { createExplainButton } from './ui/explainButton';
 import { createPopup } from './ui/popup';
 import { claudeAdapter } from '@/sites/claude';
+import { initIndexer } from '@/rag/indexer';
 import {
   EXPLAIN_PORT_NAME,
   type ExplainContext,
@@ -16,6 +17,8 @@ import {
 const RECENT_MESSAGE_COUNT = 6;
 
 export async function initHighlightExplainer(ctx: ContentScriptContext): Promise<void> {
+  ctx.onInvalidated(initIndexer());
+
   const button = await createExplainButton(ctx, () => void handleExplainClick());
   const popup = await createPopup(ctx);
 
