@@ -1,0 +1,65 @@
+<div role="group" aria-label="python code" tabindex="0"
+    class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-[var(--msg-block-radius,0.5rem)] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-100">
+    <div
+        class="sticky opacity-0 group-hover/copy:opacity-100 group-focus-within/copy:opacity-100 pointer-coarse:opacity-100 [@media(hover:none)]:opacity-100 top-2 py-2 h-12 w-0 float-right">
+        <div class="absolute right-0 h-8 px-2 items-center inline-flex z-10"><button type="button" data-cds="Button"
+                data-cds-icon-only="" data-cds-ghost=""
+                class="cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap select-none cursor-[var(--cds-cursor-interactive)] aria-disabled:cursor-default data-[disabled]:cursor-default border-0 outline-none focus-visible:outline-hidden [&amp;[data-initial-focus]:focus]:outline-hidden rounded h-control font-sans text-body [&amp;:disabled:not([aria-busy])]:opacity-disabled disabled:pointer-events-none transition-shadow duration-fast text-primary font-normal aria-pressed:text-accent focus-visible:shadow-focus [&amp;[data-initial-focus]:focus]:shadow-focus aspect-square w-control px-0 group-hover/copy:backdrop-blur-md group-focus-within/copy:backdrop-blur-md pointer-coarse:backdrop-blur-md [@media(hover:none)]:backdrop-blur-md"
+                aria-label="Copy to clipboard" id="_r_11c_" data-base-ui-tooltip-trigger=""><span aria-hidden="true"
+                    class="absolute -z-[1] rounded-[inherit] inset-0 cds-btn-squish"><span data-cds-part="paint"
+                        class="absolute inset-0 rounded-[inherit] transition-[background-color,box-shadow,color] duration-fast ease-out group-focus-visible/btn:shadow-[inset_0_0_0_1px_var(--cds-page-bg)] group-[[data-initial-focus]:focus]/btn:shadow-[inset_0_0_0_1px_var(--cds-page-bg)] bg-transparent group-hover/btn:bg-fill-ghost-hover group-[[aria-haspopup][aria-expanded=true]]/btn:bg-fill-ghost-hover group-aria-pressed/btn:bg-accent group-hover/btn:group-aria-pressed/btn:bg-accent "></span></span><span
+                    class="inline-flex min-w-0 items-center gap-1 "><span data-cds="Icon" aria-hidden="true"
+                        style="font-size: calc(1.25rem * var(--cds-rem-scale, 1)); font-weight: 433.3;"></span></span></button><span
+                role="status" class="sr-only"></span></div>
+    </div>
+    <div class="text-text-500 font-small p-3.5 pb-0">python</div>
+    <div class="overflow-x-auto">
+        <pre class="code-block__code !my-0 !rounded-[var(--msg-block-radius,0.5rem)] !text-sm !leading-relaxed p-3.5"
+            style="color: rgb(234, 236, 240); background: transparent; font-family: var(--font-mono);"><code class="language-python" data-highlight="final" style="color: rgb(234, 236, 240); background: transparent; font-family: var(--font-mono); white-space: pre;"><span class="block [unicode-bidi:inherit] [text-align:-webkit-match-parent] [text-align:match-parent]" data-code-line-group=""><span><span style="color: rgb(204, 123, 244);">from</span> fastapi <span style="color: rgb(204, 123, 244);">import</span> FastAPI
+</span><span><span style="color: rgb(204, 123, 244);">from</span> fastapi<span style="color: rgb(211, 215, 222);">.</span>middleware<span style="color: rgb(211, 215, 222);">.</span>cors <span style="color: rgb(204, 123, 244);">import</span> CORSMiddleware
+</span><span><span style="color: rgb(204, 123, 244);">from</span> contextlib <span style="color: rgb(204, 123, 244);">import</span> asynccontextmanager
+</span><span><span style="color: rgb(204, 123, 244);">from</span> database <span style="color: rgb(204, 123, 244);">import</span> engine<span style="color: rgb(211, 215, 222);">,</span> Base
+</span><span><span style="color: rgb(204, 123, 244);">import</span> models
+</span><span><span style="color: rgb(204, 123, 244);">from</span> routers <span style="color: rgb(204, 123, 244);">import</span> auth<span style="color: rgb(211, 215, 222);">,</span> products<span style="color: rgb(211, 215, 222);">,</span> orders<span style="color: rgb(211, 215, 222);">,</span> scheduled<span style="color: rgb(211, 215, 222);">,</span> recommendations
+</span><span><span style="color: rgb(204, 123, 244);">from</span> schedular <span style="color: rgb(204, 123, 244);">import</span> start_scheduler<span style="color: rgb(211, 215, 222);">,</span> stop_scheduler
+</span><span>
+</span><span><span style="color: rgb(211, 215, 222);">@</span><span style="color: rgb(112, 184, 255);">asynccontextmanager</span>
+</span><span><span style="color: rgb(204, 123, 244);">async</span> <span style="color: rgb(204, 123, 244);">def</span> <span style="color: rgb(112, 184, 255);">lifespan</span><span style="color: rgb(211, 215, 222);">(</span><span style="color: rgb(247, 171, 95);">app</span><span style="color: rgb(211, 215, 222);">:</span> FastAPI<span style="color: rgb(211, 215, 222);">):</span>
+</span><span>    Base<span style="color: rgb(211, 215, 222);">.</span>metadata<span style="color: rgb(211, 215, 222);">.</span>create_all<span style="color: rgb(211, 215, 222);">(</span><span style="color: rgb(247, 171, 95);">bind</span>=engine<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>    <span style="color: rgb(112, 184, 255);">print</span><span style="color: rgb(211, 215, 222);">(</span><span style="color: rgb(155, 233, 99);">"Tables ready."</span><span style="color: rgb(211, 215, 222);">)</span>
+</span><span>    start_scheduler<span style="color: rgb(211, 215, 222);">()</span>
+</span><span>    <span style="color: rgb(204, 123, 244);">yield</span>
+</span><span>    stop_scheduler<span style="color: rgb(211, 215, 222);">()</span>
+</span><span>
+</span><span>app = FastAPI<span style="color: rgb(211, 215, 222);">(</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">title</span>=<span style="color: rgb(155, 233, 99);">"Intellicart API"</span><span style="color: rgb(211, 215, 222);">,</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">description</span>=<span style="color: rgb(155, 233, 99);">"Backend API for Intellicart grocery app"</span><span style="color: rgb(211, 215, 222);">,</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">version</span>=<span style="color: rgb(155, 233, 99);">"1.0.0"</span><span style="color: rgb(211, 215, 222);">,</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">lifespan</span>=lifespan
+</span><span><span style="color: rgb(211, 215, 222);">)</span>
+</span><span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>add_middleware<span style="color: rgb(211, 215, 222);">(</span>
+</span><span>    CORSMiddleware<span style="color: rgb(211, 215, 222);">,</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">allow_origins</span>=<span style="color: rgb(211, 215, 222);">[</span><span style="color: rgb(155, 233, 99);">"*"</span><span style="color: rgb(211, 215, 222);">],</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">allow_credentials</span>=<span style="color: rgb(94, 237, 237);">False</span><span style="color: rgb(211, 215, 222);">,</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">allow_methods</span>=<span style="color: rgb(211, 215, 222);">[</span><span style="color: rgb(155, 233, 99);">"*"</span><span style="color: rgb(211, 215, 222);">],</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">allow_headers</span>=<span style="color: rgb(211, 215, 222);">[</span><span style="color: rgb(155, 233, 99);">"*"</span><span style="color: rgb(211, 215, 222);">],</span>
+</span><span><span style="color: rgb(211, 215, 222);">)</span>
+</span><span>
+</span><span><span style="color: rgb(211, 215, 222);">@</span><span style="color: rgb(112, 184, 255);">app</span><span style="color: rgb(211, 215, 222);">.</span><span style="color: rgb(112, 184, 255);">get</span><span style="color: rgb(211, 215, 222);">(</span><span style="color: rgb(155, 233, 99);">"/"</span><span style="color: rgb(211, 215, 222);">)</span>
+</span></span><span class="block [unicode-bidi:inherit] [text-align:-webkit-match-parent] [text-align:match-parent]" data-code-line-group=""><span><span style="color: rgb(204, 123, 244);">def</span> <span style="color: rgb(112, 184, 255);">root</span><span style="color: rgb(211, 215, 222);">():</span>
+</span><span>    <span style="color: rgb(204, 123, 244);">return</span> <span style="color: rgb(211, 215, 222);">{</span><span style="color: rgb(155, 233, 99);">"message"</span><span style="color: rgb(211, 215, 222);">:</span> <span style="color: rgb(155, 233, 99);">"Intellicart API is running!"</span><span style="color: rgb(211, 215, 222);">}</span>
+</span><span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>include_router<span style="color: rgb(211, 215, 222);">(</span>auth<span style="color: rgb(211, 215, 222);">.</span>router<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>include_router<span style="color: rgb(211, 215, 222);">(</span>products<span style="color: rgb(211, 215, 222);">.</span>router<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>include_router<span style="color: rgb(211, 215, 222);">(</span>orders<span style="color: rgb(211, 215, 222);">.</span>router<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>include_router<span style="color: rgb(211, 215, 222);">(</span>scheduled<span style="color: rgb(211, 215, 222);">.</span>router<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>include_router<span style="color: rgb(211, 215, 222);">(</span>recommendations<span style="color: rgb(211, 215, 222);">.</span>router<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>
+</span><span><span style="color: rgb(211, 215, 222);">@</span><span style="color: rgb(112, 184, 255);">app</span><span style="color: rgb(211, 215, 222);">.</span><span style="color: rgb(112, 184, 255);">post</span><span style="color: rgb(211, 215, 222);">(</span><span style="color: rgb(155, 233, 99);">"/test/run-scheduler"</span><span style="color: rgb(211, 215, 222);">)</span>
+</span><span><span style="color: rgb(204, 123, 244);">def</span> <span style="color: rgb(112, 184, 255);">test_scheduler</span><span style="color: rgb(211, 215, 222);">():</span>
+</span><span>    <span style="color: rgb(204, 123, 244);">from</span> schedular<span style="color: rgb(211, 215, 222);">.</span>jobs <span style="color: rgb(204, 123, 244);">import</span> process_scheduled_orders
+</span><span>    process_scheduled_orders<span style="color: rgb(211, 215, 222);">()</span>
+</span><span>    <span style="color: rgb(204, 123, 244);">return</span> <span style="color: rgb(211, 215, 222);">{</span><span style="color: rgb(155, 233, 99);">"message"</span><span style="color: rgb(211, 215, 222);">:</span> <span style="color: rgb(155, 233, 99);">"Scheduler ran — check terminal"</span><span style="color: rgb(211, 215, 222);">}</span></span></span></code></pre>
+    </div>
+</div>

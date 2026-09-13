@@ -1,0 +1,118 @@
+<!--
+  Hand-built for v2 chunker testing, modeled on the real row/content structure
+  captured in fixtures/short-chat.html (transcript-row / data-cds="UserMessage"
+  / data-cds="Prose" data-perf-reply-text). Decorative wrapper markup that our
+  selectors never touch (MessageActions buttons, TurnStatus "Thought for Xs"
+  pills, MCP app iframes) is trimmed for readability — it isn't exercised by
+  any adapter selector. The code block below is NOT hand-typed: it's pasted
+  verbatim from the real capture in fixtures/claude-code-message.html.
+-->
+<div role="feed" data-perf-region="transcript" aria-label="Chat messages" data-find-provider-scope="">
+    <div data-sizer-excess="0" data-rocksteady-sizer="" data-testid="transcript-sizer" style="position: relative; width: 100%;">
+        <div data-rs-index="0" data-index="0" data-testid="transcript-row" data-perf-row="human"
+            data-perf-row-from-tail="1" data-perf-row-streaming="false" style="display: flow-root; position: relative;">
+            <div role="article" tabindex="-1" aria-setsize="2" aria-posinset="1" aria-label="Message 1 of 2">
+                <div class="mb-1 mt-[var(--msg-gap,1.5rem)] group group/message-row">
+                    <div class="flex flex-col items-end gap-1">
+                        <div data-cds="UserMessage" class="group/message-row ms-auto flex w-full min-w-0 flex-col items-end gap-xs font-sans">
+                            <div class="relative flex min-w-0 flex-col gap-xs rounded-card px-lg py-md text-heading break-words select-text text-primary max-w-[85%] bg-[var(--cds-bg-user-message)]">
+                                <div>
+                                    <div data-testid="user-message" class="grid grid-cols-1 gap-2 relative">
+                                        <p class="whitespace-pre-wrap break-words" dir="ltr">Can you write me a FastAPI app with CORS and a background scheduler?</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div data-rs-index="1" data-index="1" data-testid="transcript-row" data-last-message="true"
+            data-perf-row="assistant" data-perf-row-from-tail="0" data-perf-row-streaming="false"
+            style="display: flow-root; position: relative;">
+            <div role="article" tabindex="-1" aria-setsize="2" aria-posinset="2" aria-label="Message 2 of 2">
+                <div class="group group/message-row">
+                    <div data-is-streaming="false" class="group relative relative pb-[var(--msg-assistant-pb,0.75rem)]">
+                        <div class="font-claude-response relative leading-[1.65rem]">
+                            <div data-cds="Prose" class="prose">
+                                <div data-perf-reply-text="" class="_blocks_4za3l_47 standard-markdown grid-cols-1 grid whitespace-normal break-words print:block standard-markdown">
+<h2 dir="ltr">FastAPI Backend Setup</h2>
+<p dir="ltr">Building a production-ready FastAPI backend usually starts with getting the application lifecycle right before anything else, because a scheduler, a database connection pool, and a set of routers all need to start up and shut down in a predictable order. The lifespan context manager that FastAPI exposes lets you create your database tables once at startup, kick off any background jobs like a scheduler thread, and then tear everything down cleanly when the process exits, instead of scattering that setup logic across module-level code that runs at unpredictable times during import. This matters more than it seems at first, especially once you add CORS middleware, multiple routers for different resources, and a background scheduler that needs to be stopped gracefully rather than killed mid-task. Getting this foundation right early saves you from a category of bugs that only show up under load or during deploys, when start-up and shutdown ordering actually gets exercised instead of just working by accident in local development.</p>
+<h3 dir="ltr">Why this structure</h3>
+<p dir="ltr">The specific structure used here keeps each concern in its own module so the app itself stays readable: authentication, product, order, and recommendation logic each get their own router file under a routers package, while the scheduler's start and stop functions live in a separate module that the lifespan handler imports rather than reimplementing. Cross-origin resource sharing is enabled broadly during development so a separate frontend running on a different port can call the API without extra proxy configuration, though in a real deployment you would want to narrow allow_origins down to the actual frontend domain instead of leaving it wide open. A small test endpoint is included purely so you can trigger the scheduled job manually from a browser or curl, which is useful while you are still developing the scheduled task and don't want to wait for its normal interval to roll around before you see whether it works.</p>
+<h3 dir="ltr">The code</h3>
+<div role="group" aria-label="python code" tabindex="0"
+    class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-[var(--msg-block-radius,0.5rem)] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-100">
+    <div
+        class="sticky opacity-0 group-hover/copy:opacity-100 group-focus-within/copy:opacity-100 pointer-coarse:opacity-100 [@media(hover:none)]:opacity-100 top-2 py-2 h-12 w-0 float-right">
+        <div class="absolute right-0 h-8 px-2 items-center inline-flex z-10"><button type="button" data-cds="Button"
+                data-cds-icon-only="" data-cds-ghost=""
+                class="cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap select-none cursor-[var(--cds-cursor-interactive)] aria-disabled:cursor-default data-[disabled]:cursor-default border-0 outline-none focus-visible:outline-hidden [&amp;[data-initial-focus]:focus]:outline-hidden rounded h-control font-sans text-body [&amp;:disabled:not([aria-busy])]:opacity-disabled disabled:pointer-events-none transition-shadow duration-fast text-primary font-normal aria-pressed:text-accent focus-visible:shadow-focus [&amp;[data-initial-focus]:focus]:shadow-focus aspect-square w-control px-0 group-hover/copy:backdrop-blur-md group-focus-within/copy:backdrop-blur-md pointer-coarse:backdrop-blur-md [@media(hover:none)]:backdrop-blur-md"
+                aria-label="Copy to clipboard" id="_r_11c_" data-base-ui-tooltip-trigger=""><span aria-hidden="true"
+                    class="absolute -z-[1] rounded-[inherit] inset-0 cds-btn-squish"><span data-cds-part="paint"
+                        class="absolute inset-0 rounded-[inherit] transition-[background-color,box-shadow,color] duration-fast ease-out group-focus-visible/btn:shadow-[inset_0_0_0_1px_var(--cds-page-bg)] group-[[data-initial-focus]:focus]/btn:shadow-[inset_0_0_0_1px_var(--cds-page-bg)] bg-transparent group-hover/btn:bg-fill-ghost-hover group-[[aria-haspopup][aria-expanded=true]]/btn:bg-fill-ghost-hover group-aria-pressed/btn:bg-accent group-hover/btn:group-aria-pressed/btn:bg-accent "></span></span><span
+                    class="inline-flex min-w-0 items-center gap-1 "><span data-cds="Icon" aria-hidden="true"
+                        style="font-size: calc(1.25rem * var(--cds-rem-scale, 1)); font-weight: 433.3;"></span></span></button><span
+                role="status" class="sr-only"></span></div>
+    </div>
+    <div class="text-text-500 font-small p-3.5 pb-0">python</div>
+    <div class="overflow-x-auto">
+        <pre class="code-block__code !my-0 !rounded-[var(--msg-block-radius,0.5rem)] !text-sm !leading-relaxed p-3.5"
+            style="color: rgb(234, 236, 240); background: transparent; font-family: var(--font-mono);"><code class="language-python" data-highlight="final" style="color: rgb(234, 236, 240); background: transparent; font-family: var(--font-mono); white-space: pre;"><span class="block [unicode-bidi:inherit] [text-align:-webkit-match-parent] [text-align:match-parent]" data-code-line-group=""><span><span style="color: rgb(204, 123, 244);">from</span> fastapi <span style="color: rgb(204, 123, 244);">import</span> FastAPI
+</span><span><span style="color: rgb(204, 123, 244);">from</span> fastapi<span style="color: rgb(211, 215, 222);">.</span>middleware<span style="color: rgb(211, 215, 222);">.</span>cors <span style="color: rgb(204, 123, 244);">import</span> CORSMiddleware
+</span><span><span style="color: rgb(204, 123, 244);">from</span> contextlib <span style="color: rgb(204, 123, 244);">import</span> asynccontextmanager
+</span><span><span style="color: rgb(204, 123, 244);">from</span> database <span style="color: rgb(204, 123, 244);">import</span> engine<span style="color: rgb(211, 215, 222);">,</span> Base
+</span><span><span style="color: rgb(204, 123, 244);">import</span> models
+</span><span><span style="color: rgb(204, 123, 244);">from</span> routers <span style="color: rgb(204, 123, 244);">import</span> auth<span style="color: rgb(211, 215, 222);">,</span> products<span style="color: rgb(211, 215, 222);">,</span> orders<span style="color: rgb(211, 215, 222);">,</span> scheduled<span style="color: rgb(211, 215, 222);">,</span> recommendations
+</span><span><span style="color: rgb(204, 123, 244);">from</span> schedular <span style="color: rgb(204, 123, 244);">import</span> start_scheduler<span style="color: rgb(211, 215, 222);">,</span> stop_scheduler
+</span><span>
+</span><span><span style="color: rgb(211, 215, 222);">@</span><span style="color: rgb(112, 184, 255);">asynccontextmanager</span>
+</span><span><span style="color: rgb(204, 123, 244);">async</span> <span style="color: rgb(204, 123, 244);">def</span> <span style="color: rgb(112, 184, 255);">lifespan</span><span style="color: rgb(211, 215, 222);">(</span><span style="color: rgb(247, 171, 95);">app</span><span style="color: rgb(211, 215, 222);">:</span> FastAPI<span style="color: rgb(211, 215, 222);">):</span>
+</span><span>    Base<span style="color: rgb(211, 215, 222);">.</span>metadata<span style="color: rgb(211, 215, 222);">.</span>create_all<span style="color: rgb(211, 215, 222);">(</span><span style="color: rgb(247, 171, 95);">bind</span>=engine<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>    <span style="color: rgb(112, 184, 255);">print</span><span style="color: rgb(211, 215, 222);">(</span><span style="color: rgb(155, 233, 99);">"Tables ready."</span><span style="color: rgb(211, 215, 222);">)</span>
+</span><span>    start_scheduler<span style="color: rgb(211, 215, 222);">()</span>
+</span><span>    <span style="color: rgb(204, 123, 244);">yield</span>
+</span><span>    stop_scheduler<span style="color: rgb(211, 215, 222);">()</span>
+</span><span>
+</span><span>app = FastAPI<span style="color: rgb(211, 215, 222);">(</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">title</span>=<span style="color: rgb(155, 233, 99);">"Intellicart API"</span><span style="color: rgb(211, 215, 222);">,</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">description</span>=<span style="color: rgb(155, 233, 99);">"Backend API for Intellicart grocery app"</span><span style="color: rgb(211, 215, 222);">,</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">version</span>=<span style="color: rgb(155, 233, 99);">"1.0.0"</span><span style="color: rgb(211, 215, 222);">,</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">lifespan</span>=lifespan
+</span><span><span style="color: rgb(211, 215, 222);">)</span>
+</span><span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>add_middleware<span style="color: rgb(211, 215, 222);">(</span>
+</span><span>    CORSMiddleware<span style="color: rgb(211, 215, 222);">,</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">allow_origins</span>=<span style="color: rgb(211, 215, 222);">[</span><span style="color: rgb(155, 233, 99);">"*"</span><span style="color: rgb(211, 215, 222);">],</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">allow_credentials</span>=<span style="color: rgb(94, 237, 237);">False</span><span style="color: rgb(211, 215, 222);">,</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">allow_methods</span>=<span style="color: rgb(211, 215, 222);">[</span><span style="color: rgb(155, 233, 99);">"*"</span><span style="color: rgb(211, 215, 222);">],</span>
+</span><span>    <span style="color: rgb(247, 171, 95);">allow_headers</span>=<span style="color: rgb(211, 215, 222);">[</span><span style="color: rgb(155, 233, 99);">"*"</span><span style="color: rgb(211, 215, 222);">],</span>
+</span><span><span style="color: rgb(211, 215, 222);">)</span>
+</span><span>
+</span><span><span style="color: rgb(211, 215, 222);">@</span><span style="color: rgb(112, 184, 255);">app</span><span style="color: rgb(211, 215, 222);">.</span><span style="color: rgb(112, 184, 255);">get</span><span style="color: rgb(211, 215, 222);">(</span><span style="color: rgb(155, 233, 99);">"/"</span><span style="color: rgb(211, 215, 222);">)</span>
+</span></span><span class="block [unicode-bidi:inherit] [text-align:-webkit-match-parent] [text-align:match-parent]" data-code-line-group=""><span><span style="color: rgb(204, 123, 244);">def</span> <span style="color: rgb(112, 184, 255);">root</span><span style="color: rgb(211, 215, 222);">():</span>
+</span><span>    <span style="color: rgb(204, 123, 244);">return</span> <span style="color: rgb(211, 215, 222);">{</span><span style="color: rgb(155, 233, 99);">"message"</span><span style="color: rgb(211, 215, 222);">:</span> <span style="color: rgb(155, 233, 99);">"Intellicart API is running!"</span><span style="color: rgb(211, 215, 222);">}</span>
+</span><span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>include_router<span style="color: rgb(211, 215, 222);">(</span>auth<span style="color: rgb(211, 215, 222);">.</span>router<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>include_router<span style="color: rgb(211, 215, 222);">(</span>products<span style="color: rgb(211, 215, 222);">.</span>router<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>include_router<span style="color: rgb(211, 215, 222);">(</span>orders<span style="color: rgb(211, 215, 222);">.</span>router<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>include_router<span style="color: rgb(211, 215, 222);">(</span>scheduled<span style="color: rgb(211, 215, 222);">.</span>router<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>app<span style="color: rgb(211, 215, 222);">.</span>include_router<span style="color: rgb(211, 215, 222);">(</span>recommendations<span style="color: rgb(211, 215, 222);">.</span>router<span style="color: rgb(211, 215, 222);">)</span>
+</span><span>
+</span><span><span style="color: rgb(211, 215, 222);">@</span><span style="color: rgb(112, 184, 255);">app</span><span style="color: rgb(211, 215, 222);">.</span><span style="color: rgb(112, 184, 255);">post</span><span style="color: rgb(211, 215, 222);">(</span><span style="color: rgb(155, 233, 99);">"/test/run-scheduler"</span><span style="color: rgb(211, 215, 222);">)</span>
+</span><span><span style="color: rgb(204, 123, 244);">def</span> <span style="color: rgb(112, 184, 255);">test_scheduler</span><span style="color: rgb(211, 215, 222);">():</span>
+</span><span>    <span style="color: rgb(204, 123, 244);">from</span> schedular<span style="color: rgb(211, 215, 222);">.</span>jobs <span style="color: rgb(204, 123, 244);">import</span> process_scheduled_orders
+</span><span>    process_scheduled_orders<span style="color: rgb(211, 215, 222);">()</span>
+</span><span>    <span style="color: rgb(204, 123, 244);">return</span> <span style="color: rgb(211, 215, 222);">{</span><span style="color: rgb(155, 233, 99);">"message"</span><span style="color: rgb(211, 215, 222);">:</span> <span style="color: rgb(155, 233, 99);">"Scheduler ran — check terminal"</span><span style="color: rgb(211, 215, 222);">}</span></span></span></code></pre>
+    </div>
+</div>
+<p dir="ltr">Let me know if you'd like the Docker setup too.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
