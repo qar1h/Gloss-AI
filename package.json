@@ -9,7 +9,8 @@
     "build": "wxt build",
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "test": "vitest run"
   },
   "dependencies": {
     "dompurify": "^3.4.15",
@@ -18,6 +19,7 @@
   "devDependencies": {
     "typescript": "^5.9.3",
     "vite": "^8.3.0",
+    "vitest": "^5.0.0",
     "web-ext": "^10.6.0",
     "wxt": "^0.21.4"
   }
