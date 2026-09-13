@@ -2,6 +2,8 @@
 // given chat site lives behind this interface (see src/sites/claude.ts) — nothing
 // outside src/sites/ should know what a site's HTML looks like.
 
+import type { Block } from '@/rag/types';
+
 export interface SiteMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -26,4 +28,19 @@ export interface SiteAdapter {
 
   /** Watch a message element for streaming updates. Returns an unsubscribe function. */
   watchForStreamingUpdate(el: HTMLElement, onUpdate: () => void): () => void;
+
+  /** The current conversation's stable id (from the URL), or null if not on a chat page. */
+  getConversationId(): string | null;
+
+  /** Every message currently rendered in the DOM, in chat order. */
+  getAllMessages(): SiteMessage[];
+
+  /** Whether a message is still being written (mid-stream). */
+  isStreaming(el: HTMLElement): boolean;
+
+  /** The position of the conversation's true last message, if that row is currently rendered. */
+  getLastMessagePosition(): number | null;
+
+  /** A message's content broken into ordered, typed blocks (paragraphs, headings, code, ...). */
+  getMessageBlocks(el: HTMLElement): Block[];
 }
