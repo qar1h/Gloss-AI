@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Highlight Explainer Options</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 32rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        color: #1a1a1a;
+      }
+      h1 {
+        font-size: 1.25rem;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-top: 1.25rem;
+      }
+      p.hint {
+        margin: 0.25rem 0 0;
+        font-size: 0.85rem;
+        color: #555;
+      }
+      input[type='text'],
+      input[type='password'] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.5rem;
+        margin-top: 0.4rem;
+        font-size: 1rem;
+      }
+      .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 1.25rem;
+        font-weight: 600;
+      }
+      button {
+        margin-top: 1.5rem;
+        padding: 0.5rem 1.25rem;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+      #status {
+        margin-top: 0.75rem;
+        font-size: 0.9rem;
+        min-height: 1.2em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Highlight Explainer</h1>
+
+    <form id="settings-form">
+      <label for="api-key">Gemini API key</label>
+      <input type="password" id="api-key" autocomplete="off" />
+      <p class="hint">
+        From Google AI Studio, free tier only. Stored only on this device, never sent
+        anywhere except directly to Gemini.
+      </p>
+
+      <label for="model-id">Model id</label>
+      <input type="text" id="model-id" autocomplete="off" />
+      <p class="hint">Verify current free-tier Flash model ids in Google AI Studio.</p>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="debug-enabled" />
+        <label for="debug-enabled" style="margin: 0">Debug mode (log prompt + token count)</label>
+      </div>
+
+      <button type="submit">Save</button>
+      <p id="status" role="status"></p>
+    </form>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

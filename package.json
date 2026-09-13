@@ -1,0 +1,24 @@
+{
+  "name": "highlight-explainer",
+  "description": "Highlight text in an AI chat answer and get a streamed plain-language explanation, right on the page.",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "compile": "tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.15",
+    "marked": "^18.0.12"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^8.3.0",
+    "web-ext": "^10.6.0",
+    "wxt": "^0.21.4"
+  }
+}
