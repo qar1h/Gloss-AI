@@ -7,7 +7,7 @@ export interface Settings {
   apiKey: string;
   modelId: string;
   debugEnabled: boolean;
-  retrievalK?: number;
+  retrievalK: number;
 }
 
 const apiKeyItem = storage.defineItem<string>('local:apiKey', { fallback: '' });
@@ -30,6 +30,6 @@ export async function setSettings(settings: Settings): Promise<void> {
     apiKeyItem.setValue(settings.apiKey),
     modelIdItem.setValue(settings.modelId),
     debugEnabledItem.setValue(settings.debugEnabled),
-    retrievalKItem.setValue(settings.retrievalK ?? 5),
+    retrievalKItem.setValue(settings.retrievalK),
   ]);
 }

@@ -20,10 +20,13 @@ async function loadSettings(): Promise<void> {
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
 
+  const current = await getSettings();
+
   await setSettings({
     apiKey: apiKeyInput.value.trim(),
     modelId: modelIdInput.value.trim() || DEFAULT_MODEL_ID,
     debugEnabled: debugEnabledInput.checked,
+    retrievalK: current.retrievalK,
   });
 
   status.textContent = 'Saved.';
