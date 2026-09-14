@@ -7,12 +7,13 @@
 // few thousand rows for a very long personal chat) are small enough to sort and
 // filter in memory rather than building compound-key range queries.
 
-import type { Chunk, MessageRecord } from './types';
+import type { Chunk, EmbeddingRecord, MessageRecord } from './types';
 
 const DB_NAME = 'highlight-explainer';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const MESSAGES_STORE = 'messages';
 const CHUNKS_STORE = 'chunks';
+const EMBEDDINGS_STORE = 'embeddings';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -20,16 +21,27 @@ function openDb(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = () => {
+      request.onupgradeneeded = (event) => {
         const db = request.result;
-        db.createObjectStore(MESSAGES_STORE, { keyPath: 'key' }).createIndex(
-          'by_conversation',
-          'conversationId',
-        );
-        db.createObjectStore(CHUNKS_STORE, { keyPath: 'id' }).createIndex(
-          'by_conversation',
-          'conversationId',
-        );
+        const oldVersion = event.oldVersion;
+
+        if (oldVersion < 1) {
+          db.createObjectStore(MESSAGES_STORE, { keyPath: 'key' }).createIndex(
+            'by_conversation',
+            'conversationId',
+          );
+          db.createObjectStore(CHUNKS_STORE, { keyPath: 'id' }).createIndex(
+            'by_conversation',
+            'conversationId',
+          );
+        }
+
+        if (oldVersion < 2) {
+          db.createObjectStore(EMBEDDINGS_STORE, { keyPath: 'chunkId' }).createIndex(
+            'by_conversation',
+            'conversationId',
+          );
+        }
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -74,11 +86,34 @@ export async function getAllChunks(conversationId: string): Promise<Chunk[]> {
   return chunks.sort((a, b) => a.order - b.order);
 }
 
+export async function getEmbeddingRecord(chunkId: string): Promise<EmbeddingRecord | undefined> {
+  const db = await openDb();
+  const tx = db.transaction(EMBEDDINGS_STORE, 'readonly');
+  return promisifyRequest(tx.objectStore(EMBEDDINGS_STORE).get(chunkId));
+}
+
+export async function getAllEmbeddings(conversationId: string): Promise<EmbeddingRecord[]> {
+  const db = await openDb();
+  const tx = db.transaction(EMBEDDINGS_STORE, 'readonly');
+  return promisifyRequest(
+    tx.objectStore(EMBEDDINGS_STORE).index('by_conversation').getAll(conversationId),
+  );
+}
+
+export async function putEmbedding(record: EmbeddingRecord): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(EMBEDDINGS_STORE, 'readwrite');
+  tx.objectStore(EMBEDDINGS_STORE).put(record);
+  await promisifyTx(tx);
+}
+
 /**
- * Replace everything derived from one message: delete its previous chunks (if
- * any), write the new ones, and write its bookkeeping row — all in one
- * readwrite transaction spanning both stores, so a mid-write failure can't
- * leave chunks and bookkeeping out of sync.
+ * Replace everything derived from one message: delete its previous chunks (if any),
+ * write the new ones, and write its bookkeeping row — all in one readwrite transaction
+ * spanning all three stores, so a mid-write failure can't leave chunks, embeddings, and
+ * bookkeeping out of sync. Any previous chunk id that isn't in the new chunk set (the
+ * message got shorter, or its blocks were regrouped differently) also has its embedding
+ * row deleted, so vectors for chunks that no longer exist don't silently pile up.
  */
 export async function replaceMessage(
   record: MessageRecord,
@@ -86,20 +121,30 @@ export async function replaceMessage(
   previousChunkIds: string[],
 ): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([MESSAGES_STORE, CHUNKS_STORE], 'readwrite');
+  const tx = db.transaction([MESSAGES_STORE, CHUNKS_STORE, EMBEDDINGS_STORE], 'readwrite');
   const chunkStore = tx.objectStore(CHUNKS_STORE);
-  for (const id of previousChunkIds) chunkStore.delete(id);
+  const embeddingStore = tx.objectStore(EMBEDDINGS_STORE);
+  const newChunkIds = new Set(chunks.map((c) => c.id));
+
+  for (const id of previousChunkIds) {
+    chunkStore.delete(id);
+    if (!newChunkIds.has(id)) embeddingStore.delete(id);
+  }
   for (const chunk of chunks) chunkStore.put(chunk);
   tx.objectStore(MESSAGES_STORE).put(record);
   await promisifyTx(tx);
 }
 
-/** Delete a message's bookkeeping row and all of its chunks (used for stale-tail cleanup). */
+/** Delete a message's bookkeeping row and all of its chunks and their embeddings (used for stale-tail cleanup). */
 export async function deleteMessage(record: MessageRecord): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([MESSAGES_STORE, CHUNKS_STORE], 'readwrite');
+  const tx = db.transaction([MESSAGES_STORE, CHUNKS_STORE, EMBEDDINGS_STORE], 'readwrite');
   const chunkStore = tx.objectStore(CHUNKS_STORE);
-  for (const id of record.chunkIds) chunkStore.delete(id);
+  const embeddingStore = tx.objectStore(EMBEDDINGS_STORE);
+  for (const id of record.chunkIds) {
+    chunkStore.delete(id);
+    embeddingStore.delete(id);
+  }
   tx.objectStore(MESSAGES_STORE).delete(record.key);
   await promisifyTx(tx);
 }
