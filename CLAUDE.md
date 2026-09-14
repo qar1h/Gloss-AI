@@ -16,6 +16,7 @@ A Chrome extension for AI chat websites. The user highlights a word, sentence, o
 - **Personal use only.** Load the extension unpacked in Chrome developer mode. No Chrome Web Store publishing, analytics, accounts, or telemetry.
 - **The API key never goes in the code or the repo.** The user enters it on the extension's options page, and it is stored in `chrome.storage.local`.
 - **Only read the chat page's visible text (the DOM).** Never send messages through the chat site's own session, and never call its private APIs.
+- **Never commit real chat content to the repo.** Chunk dumps, IndexedDB exports, and similar debug output contain real conversation text, which can include secrets (API keys, tokens, credentials the user pasted into a chat). None of that may be committed to the public repo. Before v6's evaluation dataset (`eval/dataset.jsonl`) goes anywhere near GitHub, it must be scrubbed by hand of any such content.
 
 ## Tech stack
 
