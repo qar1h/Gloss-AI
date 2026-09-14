@@ -32,3 +32,13 @@ export interface MessageRecord {
   chunkIds: string[];
   lastIndexedAt: number;
 }
+
+export interface EmbeddingRecord {
+  chunkId: string; // matches Chunk.id
+  conversationId: string;
+  vector: number[];
+  embeddingVersion: number;
+  chunkTextHash: string; // the chunk's own textHash at the time this vector was computed
+  status: 'done' | 'failed';
+  embeddedAt: number;
+}

@@ -22,3 +22,22 @@ export type ExplainToContent =
   | { type: 'explain-error'; requestId: string; message: string };
 
 export const EXPLAIN_PORT_NAME = 'explain';
+
+// The relay contract for local embedding: content script -> background (ensures the
+// offscreen document exists, relays) -> offscreen document (runs the model) -> back.
+// `OffscreenEmbedRequest` carries a `target` field so the offscreen document's listener
+// can tell its own relayed requests apart from the content-script-facing EmbedRequest
+// the background worker listens for.
+
+export interface EmbedRequest {
+  type: 'gloss-embed-request';
+  texts: string[];
+}
+
+export type EmbedResult = { ok: true; vectors: number[][] } | { ok: false; error: string };
+
+export interface OffscreenEmbedRequest {
+  target: 'gloss-offscreen';
+  type: 'gloss-embed-request';
+  texts: string[];
+}
