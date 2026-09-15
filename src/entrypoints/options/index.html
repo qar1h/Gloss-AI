@@ -73,6 +73,13 @@
         <label for="debug-enabled" style="margin: 0">Debug mode (log prompt + token count)</label>
       </div>
 
+      <label for="retrieval-k">Search results to retrieve (k)</label>
+      <input type="number" id="retrieval-k" min="1" max="20" step="1" />
+      <p class="hint">
+        How many matching chunks <code>__glossSearch</code> shows by default in the
+        console. Retrieval isn't used in the explain answer yet.
+      </p>
+
       <button type="submit">Save</button>
       <p id="status" role="status"></p>
     </form>
