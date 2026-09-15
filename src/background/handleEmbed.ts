@@ -44,14 +44,21 @@ export async function handleEmbedRequest(texts: string[]): Promise<EmbedResult> 
     const request: OffscreenEmbedRequest = { target: 'gloss-offscreen', type: 'gloss-embed-request', texts };
     return (await browser.runtime.sendMessage(request)) as EmbedResult;
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error creating the offscreen embedding document.';
+    const message = error instanceof Error ? error.message : 'Unknown error relaying the embed request.';
     return { ok: false, error: message };
   }
 }
 
 export function registerEmbedListener(): void {
-  browser.runtime.onMessage.addListener((raw: unknown) => {
-    if (!isContentEmbedRequest(raw)) return undefined;
-    return handleEmbedRequest(raw.texts);
-  });
+  // Chrome's runtime.onMessage ignores a Promise returned from a listener (that's a
+  // Firefox/webextension-polyfill behaviour, and this project's `browser` global is just
+  // `globalThis.chrome`). The documented Chrome pattern is to call sendResponse when the
+  // async work finishes and synchronously return true so the channel stays open until then.
+  browser.runtime.onMessage.addListener(
+    (raw: unknown, _sender: unknown, sendResponse: (response?: EmbedResult) => void) => {
+      if (!isContentEmbedRequest(raw)) return undefined;
+      void handleEmbedRequest(raw.texts).then(sendResponse);
+      return true; // keep the message channel open for the async sendResponse above
+    },
+  );
 }

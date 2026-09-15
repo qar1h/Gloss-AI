@@ -21,17 +21,24 @@ function isOffscreenEmbedRequest(message: unknown): message is OffscreenEmbedReq
   return m.target === 'gloss-offscreen' && m.type === 'gloss-embed-request' && Array.isArray(m.texts);
 }
 
-browser.runtime.onMessage.addListener((raw: unknown) => {
-  if (!isOffscreenEmbedRequest(raw)) return undefined;
+async function embed(texts: string[]): Promise<EmbedResult> {
+  try {
+    const extractor = await getExtractor();
+    const output = await extractor(texts, { pooling: 'mean', normalize: true });
+    return { ok: true, vectors: output.tolist() as number[][] };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown embedding error.';
+    return { ok: false, error: message };
+  }
+}
 
-  return (async (): Promise<EmbedResult> => {
-    try {
-      const extractor = await getExtractor();
-      const output = await extractor(raw.texts, { pooling: 'mean', normalize: true });
-      return { ok: true, vectors: output.tolist() as number[][] };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown embedding error.';
-      return { ok: false, error: message };
-    }
-  })();
-});
+// Chrome ignores a Promise returned from an onMessage listener — the sender would just get
+// `undefined` back. The documented pattern is sendResponse + a synchronous `return true`,
+// which keeps the message channel open until the async work below calls sendResponse.
+browser.runtime.onMessage.addListener(
+  (raw: unknown, _sender: unknown, sendResponse: (response?: EmbedResult) => void) => {
+    if (!isOffscreenEmbedRequest(raw)) return undefined;
+    void embed(raw.texts).then(sendResponse);
+    return true; // keep the message channel open for the async sendResponse above
+  },
+);
