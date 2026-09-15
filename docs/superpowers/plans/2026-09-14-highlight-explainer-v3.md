@@ -137,12 +137,16 @@ export interface OffscreenEmbedRequest {
 ```ts
 // Local embedding pipeline config. One constant for the model id, exactly so swapping
 // models later (or a Hugging Face repo move) is a one-line change — same pattern as
-// DEFAULT_MODEL_ID in src/llm/gemini.ts. Verify this repo id and the 'q8' dtype (used in
-// Task 4, where the model is actually loaded) are both still valid for the installed
-// @huggingface/transformers version before relying on this — Hugging Face repo names and
-// quantization option names have moved before, same caution CLAUDE.md already gives for
-// Gemini model ids.
-export const EMBEDDING_MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
+// DEFAULT_MODEL_ID in src/llm/gemini.ts.
+//
+// Verified against the installed @huggingface/transformers@4.2.0's own type
+// definitions and JSDoc examples (types/pipelines/feature-extraction.d.ts) before this
+// plan was executed: that version's own official feature-extraction example uses
+// `onnx-community/all-MiniLM-L6-v2-ONNX`, not the `Xenova/` namespace this plan
+// originally guessed. `Xenova/all-MiniLM-L6-v2` still exists on the Hugging Face Hub and
+// isn't deprecated, but `onnx-community/...` is what the currently-installed library's
+// own docs demonstrate, so that's what's used here.
+export const EMBEDDING_MODEL_ID = 'onnx-community/all-MiniLM-L6-v2-ONNX';
 
 // Bump this whenever the model or how it's called changes, so the indexer force-re-embeds
 // every chunk even when its content hasn't changed — same pattern as CHUNKER_VERSION.
@@ -802,9 +806,9 @@ export function registerEmbedListener(): void {
 }
 ```
 
-**Note for the implementer — two things flagged for live verification, not asserted as fact:**
-1. The exact `reasons` value Chrome expects for a WASM ML workload (`chrome.offscreen.Reason.WORKERS` above) is a plausible guess, not a confirmed one — check Chrome's current offscreen API docs first. If wrong, `chrome.offscreen.createDocument` throws synchronously with an error naming the valid options, so it's a fast, obvious fix on first manual test (Task 4 Step 6 below), not a silent failure.
-2. `chrome.runtime.getContexts`'s exact shape (`contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT]` above) should be checked against whatever `@types/chrome` version actually installs — if that enum path doesn't exist in the installed types, the plain string literal `contextTypes: ['OFFSCREEN_DOCUMENT']` is Chrome's documented alternative and should typecheck against a `string[]`-typed field instead.
+**Verified before this plan was executed (both were originally flagged as unconfirmed guesses):**
+1. `chrome.offscreen.Reason.WORKERS` — confirmed a real, valid enum member in `@types/chrome` (`chrome.offscreen.Reason`). There's no dedicated "WASM/ML compute" reason in the enum; `WORKERS` is the closest semantic fit and Chrome does not reject a syntactically valid reason for not matching your actual workload (that's an advisory/review-time concern, moot here since this extension is never published — see CLAUDE.md's hard constraints). No change needed.
+2. `chrome.runtime.getContexts`'s shape — confirmed correct as written. `@types/chrome`'s `ContextFilter.contextTypes` is typed `` `${ContextType}`[] ``, and `chrome.runtime.ContextType.OFFSCREEN_DOCUMENT` is a real enum member that assigns cleanly to it; `documentUrls?: string[]` also matches. No change needed.
 
 - [ ] **Step 4: Wire the listener into the background entrypoint**
 
@@ -881,7 +885,7 @@ browser.runtime.onMessage.addListener((raw: unknown) => {
 });
 ```
 
-**Note for the implementer:** verify `pipeline('feature-extraction', EMBEDDING_MODEL_ID, { dtype: 'q8' })` and `output.tolist()` against the actual installed `@huggingface/transformers` version's types/README before trusting the exact option names — same "don't guess, verify" flag as the model id itself in Task 1.
+**Verified before this plan was executed:** `pipeline('feature-extraction', EMBEDDING_MODEL_ID, { dtype: 'q8' })` and `output.tolist()` were checked directly against the installed `@huggingface/transformers@4.2.0`'s own type definitions and JSDoc examples (`types/pipelines/feature-extraction.d.ts`, `types/utils/tensor.d.ts`) — both match exactly as written. `EMBEDDING_MODEL_ID` itself was corrected (see Task 1's `embedder.ts` above) from a guessed `Xenova/...` repo to the `onnx-community/...-ONNX` repo that this library version's own docs actually demonstrate.
 
 - [ ] **Step 7: Typecheck**
 
