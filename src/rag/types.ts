@@ -40,5 +40,10 @@ export interface EmbeddingRecord {
   embeddingVersion: number;
   chunkTextHash: string; // the chunk's own textHash at the time this vector was computed
   status: 'done' | 'failed';
+  /** How many times embedding this exact chunkTextHash/embeddingVersion has failed in a
+   * row. The indexer stops retrying past a small cap, so a chunk that fails for a
+   * permanent reason doesn't re-run real inference on every indexing pass forever. Reset
+   * to 0 on success, and a changed hash or embedding version starts a fresh count. */
+  failureCount: number;
   embeddedAt: number;
 }

@@ -20,8 +20,20 @@ const DEBOUNCE_MS = 800;
 const NAVIGATION_POLL_MS = 1000;
 const STREAMING_STUCK_TIMEOUT_MS = 60_000;
 const EMBED_BATCH_SIZE = 8;
+// How many times in a row one chunk may fail to embed before it's left alone. A failure
+// that isn't transient (a model that won't load, a chunk the runtime chokes on) would
+// otherwise re-run real inference on every pass, forever.
+const MAX_EMBED_ATTEMPTS = 3;
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+// A pass now includes embedding, which can take a long time (first-run model download, or
+// inference over a big backlog). claude.ai's DOM mutates constantly while an answer
+// streams, so without this guard a second pass would start on top of a running one and both
+// would embed the same chunks. A mutation that arrives mid-pass isn't dropped: it sets
+// `rerunRequested`, and one more debounced pass runs after the current one finishes.
+let passInFlight: Promise<void> | null = null;
+let rerunRequested = false;
 
 // message key -> when it was first observed mid-stream. A real stream finishes in
 // seconds; if a row is still reporting "streaming" after STREAMING_STUCK_TIMEOUT_MS, its
@@ -31,7 +43,27 @@ const streamingSince = new Map<string, number>();
 
 function scheduleIndexPass(): void {
   if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => void runIndexPass(), DEBOUNCE_MS);
+  debounceTimer = setTimeout(() => startIndexPass(), DEBOUNCE_MS);
+}
+
+function startIndexPass(): void {
+  if (passInFlight) {
+    rerunRequested = true;
+    return;
+  }
+  rerunRequested = false;
+  passInFlight = runIndexPass()
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('[highlight-explainer] indexing pass failed:', message);
+    })
+    .finally(() => {
+      passInFlight = null;
+      if (rerunRequested) {
+        rerunRequested = false;
+        scheduleIndexPass();
+      }
+    });
 }
 
 async function runIndexPass(): Promise<void> {
@@ -90,7 +122,15 @@ async function runIndexPass(): Promise<void> {
       chunkIds: chunks.map((c) => c.id),
       lastIndexedAt: Date.now(),
     };
-    await replaceMessage(record, chunks, existing?.chunkIds ?? []);
+    const previousChunkIds = existing?.chunkIds ?? [];
+    await replaceMessage(record, chunks, previousChunkIds);
+    // replaceMessage drops the embedding rows of chunk ids this message no longer has —
+    // drop them from the status cache too, so it stays a true picture of the store.
+    const newChunkIds = new Set(record.chunkIds);
+    forgetEmbeddingStatuses(
+      conversationId,
+      previousChunkIds.filter((id) => !newChunkIds.has(id)),
+    );
 
     // Yield back to the browser between messages so a big first-time backlog
     // (opening a long chat for the first time) doesn't block the page for long.
@@ -116,14 +156,72 @@ async function cleanupStaleTail(conversationId: string): Promise<void> {
 
   const records = await getAllMessageRecords(conversationId);
   const stale = records.filter((r) => r.position > lastPosition);
-  for (const record of stale) await deleteMessage(record);
+  for (const record of stale) {
+    await deleteMessage(record);
+    forgetEmbeddingStatuses(conversationId, record.chunkIds);
+  }
 }
 
-function needsEmbedding(chunk: Chunk, existing: EmbeddingRecord | undefined): boolean {
+/**
+ * Just enough of an EmbeddingRecord to decide whether a chunk still needs embedding —
+ * deliberately without the 384-number `vector`, which is the whole point of the cache below.
+ */
+type EmbeddingStatus = Pick<
+  EmbeddingRecord,
+  'embeddingVersion' | 'chunkTextHash' | 'status' | 'failureCount'
+>;
+
+// getAllEmbeddings() returns every stored vector too, which is several MB on a long
+// conversation — far too much to deserialize out of IndexedDB on every debounced pass just
+// to answer "what still needs embedding?". So the lightweight status of each chunk is read
+// from IndexedDB once per conversation and then kept in sync in memory on every write. It's
+// a cache of our own writes, not of someone else's: the only code that writes this store is
+// this file (plus the deletes in store.ts, mirrored by forgetEmbeddingStatuses below), and
+// on an extension reload the module state is gone, so the next pass repopulates from a
+// fresh read rather than starting out silently stale.
+let statusCacheConversationId: string | null = null;
+let statusCache = new Map<string, EmbeddingStatus>();
+
+function toEmbeddingStatus(record: EmbeddingRecord): EmbeddingStatus {
+  return {
+    embeddingVersion: record.embeddingVersion,
+    chunkTextHash: record.chunkTextHash,
+    status: record.status,
+    // Records written before failureCount existed don't carry one.
+    failureCount: record.failureCount ?? 0,
+  };
+}
+
+async function getEmbeddingStatuses(conversationId: string): Promise<Map<string, EmbeddingStatus>> {
+  if (statusCacheConversationId === conversationId) return statusCache;
+  const records = await getAllEmbeddings(conversationId);
+  statusCache = new Map(records.map((r) => [r.chunkId, toEmbeddingStatus(r)]));
+  statusCacheConversationId = conversationId;
+  return statusCache;
+}
+
+/** Write an embedding row and keep the in-memory status cache in step with it. */
+async function writeEmbedding(record: EmbeddingRecord): Promise<void> {
+  await putEmbeddingRecord(record);
+  if (statusCacheConversationId === record.conversationId) {
+    statusCache.set(record.chunkId, toEmbeddingStatus(record));
+  }
+}
+
+/** Mirror store.ts's embedding deletes, so the cache can't claim a chunk is already
+ * embedded when its row has actually been deleted from IndexedDB. */
+function forgetEmbeddingStatuses(conversationId: string, chunkIds: string[]): void {
+  if (statusCacheConversationId !== conversationId) return;
+  for (const id of chunkIds) statusCache.delete(id);
+}
+
+function needsEmbedding(chunk: Chunk, existing: EmbeddingStatus | undefined): boolean {
   if (!existing) return true;
-  if (existing.status === 'failed') return true;
+  // A new model version or changed chunk text is a genuinely fresh situation, not a repeat
+  // of the same failure, so it's always retried (and resets the failure count on write).
   if (existing.embeddingVersion !== EMBEDDING_VERSION) return true;
   if (existing.chunkTextHash !== chunk.textHash) return true;
+  if (existing.status === 'failed') return existing.failureCount < MAX_EMBED_ATTEMPTS;
   return false;
 }
 
@@ -135,8 +233,7 @@ function needsEmbedding(chunk: Chunk, existing: EmbeddingRecord | undefined): bo
  */
 async function embedPendingChunks(conversationId: string): Promise<void> {
   const chunks = await getAllChunks(conversationId);
-  const existingEmbeddings = await getAllEmbeddings(conversationId);
-  const existingByChunkId = new Map(existingEmbeddings.map((e) => [e.chunkId, e]));
+  const statuses = await getEmbeddingStatuses(conversationId);
 
   const chunksByMessage = new Map<string, Chunk[]>();
   for (const chunk of chunks) {
@@ -146,7 +243,7 @@ async function embedPendingChunks(conversationId: string): Promise<void> {
   }
   for (const list of chunksByMessage.values()) list.sort((a, b) => a.chunkIndex - b.chunkIndex);
 
-  const pending = chunks.filter((c) => needsEmbedding(c, existingByChunkId.get(c.id)));
+  const pending = chunks.filter((c) => needsEmbedding(c, statuses.get(c.id)));
 
   for (let i = 0; i < pending.length; i += EMBED_BATCH_SIZE) {
     const batch = pending.slice(i, i + EMBED_BATCH_SIZE);
@@ -162,32 +259,50 @@ async function embedPendingChunks(conversationId: string): Promise<void> {
       const vectors = await embedTexts(inputs);
       await Promise.all(
         batch.map((chunk, idx) =>
-          putEmbeddingRecord({
+          writeEmbedding({
             chunkId: chunk.id,
             conversationId,
             vector: vectors[idx]!,
             embeddingVersion: EMBEDDING_VERSION,
             chunkTextHash: chunk.textHash,
             status: 'done',
+            failureCount: 0,
             embeddedAt: Date.now(),
           }),
         ),
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown embedding error.';
-      console.warn('[highlight-explainer] failed to embed a batch of chunks, will retry next pass:', message);
+      let exhausted = 0;
       await Promise.all(
-        batch.map((chunk) =>
-          putEmbeddingRecord({
+        batch.map((chunk) => {
+          // Only count repeats of the *same* attempt: a different chunk hash or embedding
+          // version is a fresh situation and starts the count over.
+          const previous = statuses.get(chunk.id);
+          const sameAttempt =
+            previous !== undefined &&
+            previous.status === 'failed' &&
+            previous.embeddingVersion === EMBEDDING_VERSION &&
+            previous.chunkTextHash === chunk.textHash;
+          const failureCount = (sameAttempt ? previous.failureCount : 0) + 1;
+          if (failureCount >= MAX_EMBED_ATTEMPTS) exhausted++;
+          return writeEmbedding({
             chunkId: chunk.id,
             conversationId,
             vector: [],
             embeddingVersion: EMBEDDING_VERSION,
             chunkTextHash: chunk.textHash,
             status: 'failed',
+            failureCount,
             embeddedAt: Date.now(),
-          }),
-        ),
+          });
+        }),
+      );
+      console.warn(
+        `[highlight-explainer] failed to embed a batch of ${batch.length} chunk(s): ${message}` +
+          (exhausted > 0
+            ? ` — ${exhausted} of them have now failed ${MAX_EMBED_ATTEMPTS} times and won't be retried until their text or the embedding version changes.`
+            : ' — will retry next pass.'),
       );
     }
 

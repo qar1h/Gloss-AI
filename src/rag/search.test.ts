@@ -27,6 +27,7 @@ function makeEmbedding(chunkId: string, vector: number[], overrides: Partial<Emb
     embeddingVersion: 1,
     chunkTextHash: 'hash-a',
     status: 'done',
+    failureCount: 0,
     embeddedAt: 0,
     ...overrides,
   };
