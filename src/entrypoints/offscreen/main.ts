@@ -30,7 +30,15 @@ let extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
 function getExtractor(): Promise<FeatureExtractionPipeline> {
   if (!extractorPromise) {
     console.log('[highlight-explainer] downloading embedding model (first run)…');
-    extractorPromise = pipeline('feature-extraction', EMBEDDING_MODEL_ID, { dtype: 'q8' }) as Promise<FeatureExtractionPipeline>;
+    extractorPromise = (
+      pipeline('feature-extraction', EMBEDDING_MODEL_ID, { dtype: 'q8' }) as Promise<FeatureExtractionPipeline>
+    ).catch((error: unknown) => {
+      // A failed load (e.g. a dropped connection mid-download) would otherwise be cached
+      // forever — every later embed call would just re-await this same rejected promise.
+      // Clear it so the next call starts a fresh download attempt instead of being stuck.
+      extractorPromise = null;
+      throw error;
+    });
   }
   return extractorPromise;
 }
