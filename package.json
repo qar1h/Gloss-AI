@@ -13,10 +13,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "dompurify": "^3.4.15",
     "marked": "^18.0.12"
   },
   "devDependencies": {
+    "@types/chrome": "^0.2.9",
     "typescript": "^5.9.3",
     "vite": "^8.3.0",
     "vitest": "^5.0.0",
