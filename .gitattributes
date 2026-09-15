@@ -1,0 +1,5 @@
+# onnxruntime-web's WASM runtime, copied verbatim from node_modules into public/.
+# Both must stay byte-for-byte identical to what the package ships, so keep git's
+# line-ending conversion away from them.
+public/ort-wasm-simd-threaded.asyncify.wasm binary
+public/ort-wasm-simd-threaded.asyncify.mjs -text

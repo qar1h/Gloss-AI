@@ -2,9 +2,28 @@
 // page has its own extension-origin storage, separate from the content script's
 // page-origin IndexedDB, so it never touches storage directly: text in, vectors out.
 
-import { pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
+import { env, pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
 import { EMBEDDING_MODEL_ID } from '@/rag/embedder';
 import type { EmbedResult, OffscreenEmbedRequest } from '@/messaging/types';
+
+// transformers.js defaults onnxruntime-web's WASM loader to a jsDelivr CDN URL the moment
+// it's imported (see its `ONNX_ENV.wasm.wasmPaths` block). An MV3 extension page can only
+// load scripts from its own origin (`script-src 'self' 'wasm-unsafe-eval'`), so that default
+// is blocked outright — the runtime never loads and every embed call fails. Point it at our
+// own copies instead, shipped verbatim from `public/` (copied there from
+// node_modules/onnxruntime-web/dist). This assignment is module scope, so it runs once when
+// the offscreen document loads, long before getExtractor()'s first pipeline() call.
+//
+// numThreads is deliberately left alone: this page is not cross-origin isolated (no
+// COOP/COEP), and onnxruntime-web already detects that itself — when numThreads is unset it
+// checks `self.crossOriginIsolated` and pins the count to 1, so there's nothing to fix here.
+const onnxWasm = env.backends.onnx.wasm;
+if (onnxWasm) {
+  onnxWasm.wasmPaths = {
+    mjs: browser.runtime.getURL('/ort-wasm-simd-threaded.asyncify.mjs'),
+    wasm: browser.runtime.getURL('/ort-wasm-simd-threaded.asyncify.wasm'),
+  };
+}
 
 let extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
 
