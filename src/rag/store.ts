@@ -1,7 +1,8 @@
 // A minimal, hand-rolled promise wrapper around the native IndexedDB API — no
-// dependency added. Two object stores: "messages" (one bookkeeping row per
-// indexed message, keyed by "<conversationId>:<messageId>") and "chunks" (the
-// chunk records, keyed by "<conversationId>:<messageId>:<chunkIndex>"). Both
+// dependency added. Three object stores: "messages" (one bookkeeping row per
+// indexed message, keyed by "<conversationId>:<messageId>"), "chunks" (the
+// chunk records, keyed by "<conversationId>:<messageId>:<chunkIndex>"), and
+// "embeddings" (one vector per chunk, keyed by that same chunk id). All three
 // carry a conversationId field with a matching index, since every read in this
 // file is scoped to one conversation. Conversation-sized result sets (at most a
 // few thousand rows for a very long personal chat) are small enough to sort and
@@ -43,8 +44,32 @@ function openDb(): Promise<IDBDatabase> {
           );
         }
       };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      // Another tab holding an open connection at the old version blocks this upgrade.
+      // Without this handler the open request would simply never settle, hanging this
+      // tab's indexer forever with no error anywhere.
+      request.onblocked = () => {
+        dbPromise = null; // let a later call try again once the other tab is gone
+        reject(
+          new Error(
+            'IndexedDB upgrade blocked by another open tab — close other claude.ai tabs and reload.',
+          ),
+        );
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        // If a newer version of this extension wants to upgrade the database while this
+        // tab is still open, yield instead of blocking it (the mirror image of the
+        // onblocked case above).
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null; // force the next openDb() in this tab to reopen fresh
+        };
+        resolve(db);
+      };
+      request.onerror = () => {
+        dbPromise = null;
+        reject(request.error);
+      };
     });
   }
   return dbPromise;
