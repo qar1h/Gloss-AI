@@ -1,11 +1,11 @@
 // Local embedding pipeline config. One constant for the model id, exactly so swapping
 // models later (or a Hugging Face repo move) is a one-line change — same pattern as
-// DEFAULT_MODEL_ID in src/llm/gemini.ts. Verify this repo id and the 'q8' dtype (used in
-// Task 4, where the model is actually loaded) are both still valid for the installed
-// @huggingface/transformers version before relying on this — Hugging Face repo names and
-// quantization option names have moved before, same caution CLAUDE.md already gives for
-// Gemini model ids.
-export const EMBEDDING_MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
+// DEFAULT_MODEL_ID in src/llm/gemini.ts. This model id was verified against the installed
+// @huggingface/transformers package's own documentation (types/pipelines/feature-extraction.d.ts
+// and JSDoc examples), which demonstrates the onnx-community namespace, not Xenova.
+// The 'q8' dtype (used in Task 4, where the model is actually loaded) is also verified
+// as a valid option for this model in the installed version.
+export const EMBEDDING_MODEL_ID = 'onnx-community/all-MiniLM-L6-v2-ONNX';
 
 // Bump this whenever the model or how it's called changes, so the indexer force-re-embeds
 // every chunk even when its content hasn't changed — same pattern as CHUNKER_VERSION.
