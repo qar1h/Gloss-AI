@@ -1,20 +1,33 @@
 import { claudeAdapter, getTranscriptFeed } from '@/sites/claude';
-import { getSettings } from '@/options/storage';
+import { getSettings, type Settings } from '@/options/storage';
 import { chunkMessage, CHUNKER_VERSION } from './chunker';
 import { hashText } from './hash';
+import { embedTexts, EMBEDDING_VERSION } from './embedder';
+import { buildEmbedInputForChunk, buildSearchQueryText } from './query';
+import { searchChunks } from './search';
 import {
   deleteMessage,
   getAllChunks,
+  getAllEmbeddings,
   getAllMessageRecords,
   getMessageRecord,
+  putEmbedding as putEmbeddingRecord,
   replaceMessage,
 } from './store';
-import type { MessageRecord } from './types';
+import type { Chunk, EmbeddingRecord, MessageRecord } from './types';
 
 const DEBOUNCE_MS = 800;
 const NAVIGATION_POLL_MS = 1000;
+const STREAMING_STUCK_TIMEOUT_MS = 60_000;
+const EMBED_BATCH_SIZE = 8;
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+// message key -> when it was first observed mid-stream. A real stream finishes in
+// seconds; if a row is still reporting "streaming" after STREAMING_STUCK_TIMEOUT_MS, its
+// data-perf-row-streaming flag is almost certainly stuck (e.g. an errored generation),
+// and it's indexed anyway rather than skipped forever.
+const streamingSince = new Map<string, number>();
 
 function scheduleIndexPass(): void {
   if (debounceTimer) clearTimeout(debounceTimer);
@@ -25,12 +38,37 @@ async function runIndexPass(): Promise<void> {
   const conversationId = claudeAdapter.getConversationId();
   if (!conversationId) return;
 
+  const settings = await getSettings();
+
+  if (settings.debugEnabled) {
+    const unrecognized = claudeAdapter.getUnrecognizedRowIds();
+    if (unrecognized.length > 0) {
+      console.log('[highlight-explainer] rows with no recognized role/id (never indexed):', unrecognized);
+    }
+  }
+
   for (const message of claudeAdapter.getAllMessages()) {
-    if (claudeAdapter.isStreaming(message.element)) continue; // revisited once it flips to false
+    const key = `${conversationId}:${message.id}`;
+
+    if (claudeAdapter.isStreaming(message.element)) {
+      const firstSeen = streamingSince.get(key);
+      if (firstSeen === undefined) {
+        streamingSince.set(key, Date.now());
+        if (settings.debugEnabled) console.log(`[highlight-explainer] skipping message ${message.id} — still streaming`);
+        continue;
+      }
+      if (Date.now() - firstSeen < STREAMING_STUCK_TIMEOUT_MS) continue;
+      if (settings.debugEnabled) {
+        console.warn(
+          `[highlight-explainer] message ${message.id} has looked like it's streaming for over ${STREAMING_STUCK_TIMEOUT_MS / 1000}s — indexing it anyway`,
+        );
+      }
+    } else {
+      streamingSince.delete(key);
+    }
 
     const flatText = claudeAdapter.getMessageText(message.element);
     const textHash = await hashText(flatText);
-    const key = `${conversationId}:${message.id}`;
     const existing = await getMessageRecord(key);
 
     const unchanged =
@@ -60,7 +98,8 @@ async function runIndexPass(): Promise<void> {
   }
 
   await cleanupStaleTail(conversationId);
-  if ((await getSettings()).debugEnabled) await dumpChunks(conversationId);
+  await embedPendingChunks(conversationId);
+  if (settings.debugEnabled) await dumpChunks(conversationId);
 }
 
 /**
@@ -80,6 +119,82 @@ async function cleanupStaleTail(conversationId: string): Promise<void> {
   for (const record of stale) await deleteMessage(record);
 }
 
+function needsEmbedding(chunk: Chunk, existing: EmbeddingRecord | undefined): boolean {
+  if (!existing) return true;
+  if (existing.status === 'failed') return true;
+  if (existing.embeddingVersion !== EMBEDDING_VERSION) return true;
+  if (existing.chunkTextHash !== chunk.textHash) return true;
+  return false;
+}
+
+/**
+ * Embeds every chunk in the conversation that's new, changed, on a stale model version,
+ * or previously failed. Batches multiple chunks per round trip to the offscreen document
+ * (one round trip per chunk would be far slower), and yields between batches for the same
+ * reason the per-message chunking loop above does.
+ */
+async function embedPendingChunks(conversationId: string): Promise<void> {
+  const chunks = await getAllChunks(conversationId);
+  const existingEmbeddings = await getAllEmbeddings(conversationId);
+  const existingByChunkId = new Map(existingEmbeddings.map((e) => [e.chunkId, e]));
+
+  const chunksByMessage = new Map<string, Chunk[]>();
+  for (const chunk of chunks) {
+    const list = chunksByMessage.get(chunk.messageId) ?? [];
+    list.push(chunk);
+    chunksByMessage.set(chunk.messageId, list);
+  }
+  for (const list of chunksByMessage.values()) list.sort((a, b) => a.chunkIndex - b.chunkIndex);
+
+  const pending = chunks.filter((c) => needsEmbedding(c, existingByChunkId.get(c.id)));
+
+  for (let i = 0; i < pending.length; i += EMBED_BATCH_SIZE) {
+    const batch = pending.slice(i, i + EMBED_BATCH_SIZE);
+    const inputs = batch.map((chunk) => {
+      const siblings = chunksByMessage.get(chunk.messageId) ?? [];
+      const index = siblings.findIndex((c) => c.id === chunk.id);
+      const previous = index > 0 ? siblings[index - 1]!.text : null;
+      const next = index >= 0 && index < siblings.length - 1 ? siblings[index + 1]!.text : null;
+      return buildEmbedInputForChunk(chunk.text, previous, next);
+    });
+
+    try {
+      const vectors = await embedTexts(inputs);
+      await Promise.all(
+        batch.map((chunk, idx) =>
+          putEmbeddingRecord({
+            chunkId: chunk.id,
+            conversationId,
+            vector: vectors[idx]!,
+            embeddingVersion: EMBEDDING_VERSION,
+            chunkTextHash: chunk.textHash,
+            status: 'done',
+            embeddedAt: Date.now(),
+          }),
+        ),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown embedding error.';
+      console.warn('[highlight-explainer] failed to embed a batch of chunks, will retry next pass:', message);
+      await Promise.all(
+        batch.map((chunk) =>
+          putEmbeddingRecord({
+            chunkId: chunk.id,
+            conversationId,
+            vector: [],
+            embeddingVersion: EMBEDDING_VERSION,
+            chunkTextHash: chunk.textHash,
+            status: 'failed',
+            embeddedAt: Date.now(),
+          }),
+        ),
+      );
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 async function dumpChunks(conversationId: string): Promise<void> {
   const chunks = await getAllChunks(conversationId);
   console.table(
@@ -92,6 +207,36 @@ async function dumpChunks(conversationId: string): Promise<void> {
       preview: c.text.slice(0, 80),
     })),
   );
+}
+
+async function dumpSearch(conversationId: string, text: string, k: number): Promise<void> {
+  const queryText = buildSearchQueryText(text, text);
+  const [queryVector] = await embedTexts([queryText]);
+  const results = await searchChunks(conversationId, queryVector!, k);
+
+  console.table(
+    results.map(({ chunk, score }) => ({
+      score: score.toFixed(4),
+      role: chunk.role,
+      messageId: chunk.messageId,
+      chunkIndex: chunk.chunkIndex,
+      wordCount: chunk.wordCount,
+      hasCode: chunk.hasCode,
+      preview: chunk.text.slice(0, 80),
+    })),
+  );
+
+  const lastPosition = claudeAdapter.getLastMessagePosition();
+  const indexedCount = new Set((await getAllMessageRecords(conversationId)).map((r) => r.position)).size;
+  if (lastPosition !== null) {
+    console.log(
+      `[highlight-explainer] indexed ${indexedCount} of ~${lastPosition + 1} messages in this chat — scroll through more of it to include it in search.`,
+    );
+  } else {
+    console.log(
+      `[highlight-explainer] indexed ${indexedCount} messages in this chat (true chat length unknown — the last message isn't currently rendered).`,
+    );
+  }
 }
 
 export function initIndexer(): () => void {
@@ -133,6 +278,16 @@ export function initIndexer(): () => void {
   (window as unknown as { __glossDumpChunks?: () => Promise<void> }).__glossDumpChunks = async () => {
     const id = claudeAdapter.getConversationId();
     if (id) await dumpChunks(id);
+  };
+
+  (window as unknown as { __glossSearch?: (text: string, k?: number) => Promise<void> }).__glossSearch = async (
+    text: string,
+    k?: number,
+  ) => {
+    const id = claudeAdapter.getConversationId();
+    if (!id) return;
+    const settings: Settings = await getSettings();
+    await dumpSearch(id, text, k ?? settings.retrievalK);
   };
 
   return () => {
