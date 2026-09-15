@@ -191,6 +191,12 @@ export const claudeAdapter: SiteAdapter = {
     const contentEl = el.querySelector<HTMLElement>(selector);
     return contentEl ? getBlocks(contentEl) : [];
   },
+
+  getUnrecognizedRowIds(): string[] {
+    return allRows()
+      .filter((row) => roleFromRow(row) === null || row.dataset.index === undefined)
+      .map((row) => row.dataset.index ?? '(no data-index)');
+  },
 };
 
 /** The element that contains the whole message list — the right target to watch for new/removed messages. */

@@ -43,4 +43,8 @@ export interface SiteAdapter {
 
   /** A message's content broken into ordered, typed blocks (paragraphs, headings, code, ...). */
   getMessageBlocks(el: HTMLElement): Block[];
+
+  /** Debug only: ids (or a placeholder) of DOM rows getAllMessages() couldn't recognize
+   * (missing role or id) — lets the indexer log what it's silently not indexing. */
+  getUnrecognizedRowIds(): string[];
 }
