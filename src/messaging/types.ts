@@ -41,3 +41,14 @@ export interface OffscreenEmbedRequest {
   type: 'gloss-embed-request';
   texts: string[];
 }
+
+// Sent once by the offscreen document, the instant its message listener registers —
+// *before* it attempts to load transformers.js. createDocument() resolving only means
+// Chrome accepted the request to create the page; it says nothing about whether the page's
+// own script finished running. Waiting for this instead of trusting createDocument() means
+// a crash during setup gets a specific, diagnosable error instead of the generic
+// "Could not establish connection" Chrome produces when a later real request finds no
+// listener at all.
+export interface OffscreenReadyAnnouncement {
+  target: 'gloss-offscreen-ready';
+}
