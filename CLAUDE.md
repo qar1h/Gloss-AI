@@ -158,8 +158,8 @@ eval/             # v6 only: dataset + evaluation scripts
 
 ## Current status
 
-- **Current version:** v4, built, awaiting live test
-- **Completed versions:** v1, v2, v3
+- **Current version:** v5, not started
+- **Completed versions:** v1, v2, v3, v4
 - **Notes:**
 
   **What was built (v1):** Highlight text in a Claude answer on claude.ai, click the "Explain" button that appears, and get a streamed, markdown-rendered, plain-language explanation in a Shadow DOM popup anchored near the highlight — using the highlight, its paragraph, its message, the user question that produced it, and the last few messages as context. Options page stores the Gemini API key, model id, and a debug toggle. Confirmed working end-to-end on live claude.ai, for both short and longer chats.
@@ -211,7 +211,7 @@ eval/             # v6 only: dataset + evaluation scripts
 
   **Known open issues carried into v4:** virtualization coverage (above) — a long chat is only searchable where you have scrolled; formula/math rendering has still never been observed on a real page; the stale-content-script trap (see "Development gotchas"); the first run downloads the model (~23 MB) before any search works; the typed-question input does not exist yet.
 
-  **What was built (v4, built — awaiting live test):** Keyword search and fusion, ending at the console like v3. Our own BM25 (`src/rag/tokenize.ts`, `bm25.ts`) ranks the stored chunks; reciprocal rank fusion (`fusion.ts`, score = sum of 1/(60 + rank)) merges that with v3's embedding ranking; `hybrid.ts` ties them together. `window.__glossHybrid(text?, k?, depth?)` prints the embedding, BM25 and fused rankings side by side with each chunk's rank and score in every list, which terms matched, and an "own msg" column flagging chunks from the highlight's own message (kept deliberately so the self-match effect is visible before v5 decides anything). With no `text` it uses the current page selection and the real paragraph around it. The prompt, the popup, `__glossSearch`, the chunker and the IndexedDB schema are untouched. Plan: `docs/superpowers/plans/2026-10-04-highlight-explainer-v4.md`. Not yet confirmed live.
+  **What was built (v4):** Keyword search and fusion, ending at the console like v3. Our own BM25 (`src/rag/tokenize.ts`, `bm25.ts`) ranks the stored chunks; reciprocal rank fusion (`fusion.ts`, score = sum of 1/(60 + rank)) merges that with v3's embedding ranking; `hybrid.ts` ties them together. `window.__glossHybrid(text?, k?, depth?)` prints the embedding, BM25 and fused rankings side by side with each chunk's rank and score in every list, which terms matched, and an "own msg" column flagging chunks from the highlight's own message (kept deliberately so the self-match effect is visible before v5 decides anything). With no `text` it uses the current page selection and the real paragraph around it. The prompt, the popup, `__glossSearch`, the chunker and the IndexedDB schema are untouched. Plan: `docs/superpowers/plans/2026-10-04-highlight-explainer-v4.md`.
 
   **Key decisions (v4):**
   - **No persisted index.** Term statistics are rebuilt in memory on every search, so edits, regenerations and deletes are always correct. The one expensive step, tokenising, is skipped for unchanged chunks through an in-memory cache keyed by each chunk's own `textHash`.
@@ -221,4 +221,19 @@ eval/             # v6 only: dataset + evaluation scripts
   - **Done-when (weakened on purpose):** the chunk where an exact term is defined appears in the top-k, not necessarily rank 1 — BM25 finds where a term is densest, not where it first appeared.
   - **Measured, not assumed:** `npm run bench` (synthetic text, plain timing; numbers and machine in `docs/benchmarks/2026-10-04-bm25-3000-chunks.md`). The first estimate was wrong — a cold 3000-chunk index build was ~580 ms — which is why the tokenizer fast path and the term-count cache exist. Now ~187 ms cold and ~32–49 ms warm at 3000 chunks (about 3 ms warm at 300).
 
-  **Known open issues (v4):** not tested live yet; the self-match effect (the highlight's own chunk ranks near the top of both lists) is visible but unhandled until v5; a one-word highlight like "it" gives BM25 nothing; `C++`, `$ref` and `@Override` lose their symbols in tokenising; BM25 numbers are from Node on synthetic text, not Chrome on real chats.
+  **Confirmed live on claude.ai (v4):** on a real long chat (the Supabase chat, 152 chunks indexed), `__glossHybrid('pool_pre_ping')` gave:
+
+  | chunk | what it is | embedding rank | BM25 rank | fused |
+  |---|---|---|---|---|
+  | 257:4 | prose explaining it | 1 | 2 | 1 |
+  | 257:3 | the code block | 4 | 1 | 2 |
+  | 243:1 | | 6 | 3 | 3 |
+  | **243:2** | explains `create_engine` / pooling | **37** | **4** | **4** |
+
+  **The 243:2 result is the evidence that hybrid search is worth keeping.** Embeddings alone ranked that chunk 37th, so it would never have been retrieved at any realistic k; BM25 ranked it 4th (which query terms matched was in the debug table but was not recorded here), and fusion made it 4th overall. Both lists put the prose and the code block at the top, but it is the chunk only BM25 could surface that justifies the second ranking. This was also the first time the depth cap (`RRF_DEPTH` = 50) was binding on the embedding list, as expected for a chat with 152 chunks. Negative control: on an unrelated chat, BM25 returned 0 matches and invented none — correct abstention.
+
+  **Known open issues carried into v5:**
+  - **Virtualization coverage is now the biggest open issue.** The same chat shows "indexed 50 of ~406 messages": only messages that have been mounted in the DOM are indexed or searchable, so retrieval over a long chat is blind to everything not yet scrolled into view. (v3 saw 3 of ~36 without scrolling.) Still unresolved; auto-scrolling was rejected in v3 because it moves the user's reading position.
+  - The self-match effect (the highlight's own chunk ranks near the top of both lists) is visible via the "own msg" column but unhandled until v5, which always includes the source message separately and should exclude it from retrieval.
+  - A one-word highlight like "it" gives BM25 nothing; `C++`, `$ref` and `@Override` lose their symbols in tokenising; no stemming; formulas still never observed on a real page.
+  - The BM25 benchmark numbers are from Node on synthetic text, not Chrome on real chats.
