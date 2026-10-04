@@ -132,6 +132,14 @@ export async function putEmbedding(record: EmbeddingRecord): Promise<void> {
   await promisifyTx(tx);
 }
 
+/** Delete a single chunk's embedding row (used by the __glossResetFailedEmbeddings debug command). */
+export async function deleteEmbedding(chunkId: string): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(EMBEDDINGS_STORE, 'readwrite');
+  tx.objectStore(EMBEDDINGS_STORE).delete(chunkId);
+  await promisifyTx(tx);
+}
+
 /**
  * Replace everything derived from one message: delete its previous chunks (if any),
  * write the new ones, and write its bookkeeping row — all in one readwrite transaction

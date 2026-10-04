@@ -6,6 +6,7 @@ import { embedTexts, EMBEDDING_VERSION } from './embedder';
 import { buildEmbedInputForChunk, buildSearchQueryText } from './query';
 import { searchChunks } from './search';
 import {
+  deleteEmbedding,
   deleteMessage,
   getAllChunks,
   getAllEmbeddings,
@@ -310,6 +311,24 @@ async function embedPendingChunks(conversationId: string): Promise<void> {
   }
 }
 
+/**
+ * Debug command: delete every 'failed' embedding record for the current conversation, so
+ * needsEmbedding() treats those chunks as brand new on the next pass instead of refusing to
+ * retry them once failureCount has hit MAX_EMBED_ATTEMPTS. Deliberately scoped to 'failed'
+ * records only — a 'done' embedding is never touched by this. Triggers an immediate pass
+ * afterward rather than waiting for the next organic DOM mutation.
+ */
+async function resetFailedEmbeddings(conversationId: string): Promise<number> {
+  const records = await getAllEmbeddings(conversationId);
+  const failed = records.filter((r) => r.status === 'failed');
+  for (const record of failed) await deleteEmbedding(record.chunkId);
+  forgetEmbeddingStatuses(
+    conversationId,
+    failed.map((r) => r.chunkId),
+  );
+  return failed.length;
+}
+
 async function dumpChunks(conversationId: string): Promise<void> {
   const chunks = await getAllChunks(conversationId);
   console.table(
@@ -404,6 +423,15 @@ export function initIndexer(): () => void {
     const settings: Settings = await getSettings();
     await dumpSearch(id, text, k ?? settings.retrievalK);
   };
+
+  (window as unknown as { __glossResetFailedEmbeddings?: () => Promise<void> }).__glossResetFailedEmbeddings =
+    async () => {
+      const id = claudeAdapter.getConversationId();
+      if (!id) return;
+      const count = await resetFailedEmbeddings(id);
+      console.log(`[highlight-explainer] cleared ${count} failed embedding(s) — re-indexing now.`);
+      scheduleIndexPass();
+    };
 
   return () => {
     feedObserver.disconnect();
