@@ -223,14 +223,14 @@ eval/             # v6 only: dataset + evaluation scripts
 
   **Confirmed live on claude.ai (v4):** on a real long chat (the Supabase chat, 152 chunks indexed), `__glossHybrid('pool_pre_ping')` gave:
 
-  | chunk | what it is | embedding rank | BM25 rank | fused |
-  |---|---|---|---|---|
-  | 257:4 | prose explaining it | 1 | 2 | 1 |
-  | 257:3 | the code block | 4 | 1 | 2 |
-  | 243:1 | | 6 | 3 | 3 |
-  | **243:2** | explains `create_engine` / pooling | **37** | **4** | **4** |
+  | chunk | what it is | embedding rank | BM25 rank | fused | BM25 matched terms |
+  |---|---|---|---|---|---|
+  | 257:4 | prose explaining it | 1 | 2 | 1 | `pool_pre_ping`, `pool`, `pre`, `ping` (all four) |
+  | 257:3 | the code block | 4 | 1 | 2 | `pool_pre_ping`, `pool`, `pre`, `ping` (all four) |
+  | 243:1 | | 6 | 3 | 3 | `pool` only |
+  | **243:2** | explains `create_engine` / pooling | **37** | **4** | **4** | **`pool` only** |
 
-  **The 243:2 result is the evidence that hybrid search is worth keeping.** Embeddings alone ranked that chunk 37th, so it would never have been retrieved at any realistic k; BM25 ranked it 4th (which query terms matched was in the debug table but was not recorded here), and fusion made it 4th overall. Both lists put the prose and the code block at the top, but it is the chunk only BM25 could surface that justifies the second ranking. This was also the first time the depth cap (`RRF_DEPTH` = 50) was binding on the embedding list, as expected for a chat with 152 chunks. Negative control: on an unrelated chat, BM25 returned 0 matches and invented none — correct abstention.
+  **The 243:2 result is the evidence that hybrid search is worth keeping — and it exists only because of a specific tokenizer decision.** Embeddings alone ranked that chunk 37th, so it would never have been retrieved at any realistic k. BM25 ranked it 4th, and fusion made it 4th overall. The matched terms show why: 243:2 and 243:1 matched only `pool`, while 257:3 and 257:4 matched all four terms. **243:2 does not contain `pool_pre_ping` at all.** It was found solely because the tokenizer emits an identifier's *parts* as well as the whole token (`pool_pre_ping` -> `pool_pre_ping`, `pool`, `pre`, `ping`). With a whole-token-only tokenizer, the query would have been the single term `pool_pre_ping`, it would have matched just the two chunks that literally contain it, and this chunk — the clearest case for hybrid search — would never have surfaced. **Do not simplify the tokenizer to whole tokens only** without re-running this case. Both lists put the prose and the code block at the top; it is the chunk only BM25 (via the parts) could surface that justifies the second ranking. This was also the first time the depth cap (`RRF_DEPTH` = 50) was binding on the embedding list, as expected for a chat with 152 chunks. Negative control: on an unrelated chat, BM25 returned 0 matches and invented none — correct abstention.
 
   **Known open issues carried into v5:**
   - **Virtualization coverage is now the biggest open issue.** The same chat shows "indexed 50 of ~406 messages": only messages that have been mounted in the DOM are indexed or searchable, so retrieval over a long chat is blind to everything not yet scrolled into view. (v3 saw 3 of ~36 without scrolling.) Still unresolved; auto-scrolling was rejected in v3 because it moves the user's reading position.
