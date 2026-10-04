@@ -5,6 +5,8 @@ import { hashText } from './hash';
 import { embedTexts, EMBEDDING_VERSION } from './embedder';
 import { buildEmbedInputForChunk, buildSearchQueryText } from './query';
 import { searchChunks } from './search';
+import { RRF_DEPTH } from './fusion';
+import { buildDebugRows, describeLists, hybridSearch } from './hybrid';
 import {
   deleteEmbedding,
   deleteMessage,
@@ -373,6 +375,70 @@ async function dumpSearch(conversationId: string, text: string, k: number): Prom
   }
 }
 
+/**
+ * v4 debug command: embedding ranking, BM25 ranking and the fused ranking side by side.
+ * With no `text` it uses the current page selection and the real paragraph around it (what
+ * an Explain click would use). With `text` it behaves like a typed highlight. The BM25
+ * query is the highlight only; the embedding query is the same one v3 builds.
+ */
+async function dumpHybrid(conversationId: string, text?: string, k?: number, depth?: number): Promise<void> {
+  const settings: Settings = await getSettings();
+  const effectiveK = k ?? settings.retrievalK;
+  const effectiveDepth = depth ?? RRF_DEPTH;
+
+  let highlight: string;
+  let paragraph: string;
+  let ownMessageIds: Set<string>;
+
+  if (text !== undefined) {
+    highlight = text;
+    paragraph = text;
+    // No real source message for typed text, so "own" = every message that contains it.
+    const chunks = await getAllChunks(conversationId);
+    ownMessageIds = new Set(chunks.filter((c) => c.text.includes(text)).map((c) => c.messageId));
+  } else {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !selection.toString().trim()) {
+      console.warn('[highlight-explainer] select some text in a message first, or pass text: __glossHybrid("text")');
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    highlight = selection.toString().trim();
+    paragraph = claudeAdapter.getParagraphAround(range);
+    const message = claudeAdapter.getMessageForNode(range.commonAncestorContainer);
+    ownMessageIds = new Set(message ? [message.id] : []);
+  }
+
+  let queryVector: number[] | null = null;
+  try {
+    const [vector] = await embedTexts([buildSearchQueryText(highlight, paragraph)]);
+    queryVector = vector ?? null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[highlight-explainer] could not embed the query (${message}) — showing BM25 only.`);
+  }
+
+  const ranking = await hybridSearch(conversationId, queryVector, highlight, effectiveDepth);
+
+  console.log(
+    `[highlight-explainer] BM25 query terms: ${ranking.queryTerms.length > 0 ? ranking.queryTerms.join(', ') : 'none — BM25 abstained, embedding only'}`,
+  );
+  console.log(`[highlight-explainer] ${describeLists(ranking, effectiveDepth)}`);
+  console.table(buildDebugRows(ranking, effectiveK, ownMessageIds));
+
+  const lastPosition = claudeAdapter.getLastMessagePosition();
+  const indexedCount = new Set((await getAllMessageRecords(conversationId)).map((r) => r.position)).size;
+  if (lastPosition !== null) {
+    console.log(
+      `[highlight-explainer] indexed ${indexedCount} of ~${lastPosition + 1} messages in this chat — scroll through more of it to include it in search.`,
+    );
+  } else {
+    console.log(
+      `[highlight-explainer] indexed ${indexedCount} messages in this chat (true chat length unknown — the last message isn't currently rendered).`,
+    );
+  }
+}
+
 export function initIndexer(): () => void {
   let observedFeed: HTMLElement | null = null;
   const feedObserver = new MutationObserver(() => scheduleIndexPass());
@@ -423,6 +489,13 @@ export function initIndexer(): () => void {
     const settings: Settings = await getSettings();
     await dumpSearch(id, text, k ?? settings.retrievalK);
   };
+
+  (window as unknown as { __glossHybrid?: (text?: string, k?: number, depth?: number) => Promise<void> }).__glossHybrid =
+    async (text?: string, k?: number, depth?: number) => {
+      const id = claudeAdapter.getConversationId();
+      if (!id) return;
+      await dumpHybrid(id, text, k, depth);
+    };
 
   (window as unknown as { __glossResetFailedEmbeddings?: () => Promise<void> }).__glossResetFailedEmbeddings =
     async () => {

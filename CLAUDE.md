@@ -152,10 +152,14 @@ eval/             # v6 only: dataset + evaluation scripts
 - Explain things in simple, plain language, but still properly and in detail.
 - When making a technical choice, say why in a sentence or two.
 
+## Development gotchas
+
+- **STALE CONTENT SCRIPT — reload the claude.ai tab after every extension reload.** Refreshing the extension on `chrome://extensions` does *not* replace the content script already injected into an open claude.ai tab. The old one keeps running, pointed at an extension context that no longer exists, and fails with `chrome-extension://invalid` errors and "Could not establish connection. Receiving end does not exist." This cost a lot of time during v3 (it looked like a second bug after the first was fixed) and **will happen again** after every `npm run build` + extension refresh. First thing to do when anything messaging-related fails: reload the tab, then re-test. Only chase a real bug if it survives a tab reload.
+
 ## Current status
 
-- **Current version:** v3, not started
-- **Completed versions:** v1, v2
+- **Current version:** v4, built, awaiting live test
+- **Completed versions:** v1, v2, v3
 - **Notes:**
 
   **What was built (v1):** Highlight text in a Claude answer on claude.ai, click the "Explain" button that appears, and get a streamed, markdown-rendered, plain-language explanation in a Shadow DOM popup anchored near the highlight — using the highlight, its paragraph, its message, the user question that produced it, and the last few messages as context. Options page stores the Gemini API key, model id, and a debug toggle. Confirmed working end-to-end on live claude.ai, for both short and longer chats.
@@ -184,3 +188,37 @@ eval/             # v6 only: dataset + evaluation scripts
   - `vitest` was added (the only new dependency) for the chunker's pure unit tests, since it's the one piece of v2 logic with no DOM involved. DOM/selector-dependent logic was instead verified interactively in a real browser with Playwright, against both real captured fixtures and a new hand-built one combining a long multi-paragraph answer with a real code block — same "never guess a selector" discipline as v1.
 
   **Known open issues carried into v3:** formula/math rendering has never been observed on a real claude.ai page (no fixture shows it), so "never split a formula" isn't implemented — only code blocks are handled; a message disappearing from the *middle* of a conversation isn't handled, only the "branch got shorter" tail case; conversation-switch detection uses a 1-second poll rather than a real navigation event, since claude.ai (a single-page app) has no reliable DOM event for "you switched chats."
+
+  **What was built (v3):** Every stored chunk is embedded locally (transformers.js, `Xenova/all-MiniLM-L6-v2` quantized, 384-dim vectors, no network calls after the one-time model download) and ranked by cosine similarity against a query made from the highlight plus the sentence around it. The model runs in a `chrome.offscreen` document, relayed through the background worker. Vectors live in a new `embeddings` IndexedDB store (schema version 2). Embedding is incremental and piggybacks on the v2 indexing pass: only new, changed, stale-version or previously-failed chunks are embedded, in batches of 8, yielding to the page between batches. `window.__glossSearch(text, k?)` prints the top-k chunks with scores plus a coverage line ("indexed N of ~M messages"); `k` is a setting on the options page (default 5). Retrieval is **not** used in the explain prompt — v3 ends at the console.
+
+  **Key decisions:**
+  - **MiniLM over bge-small:** roughly half the transformer layers and a smaller download, for a tool meant to feel instant; bge-small's few extra retrieval-benchmark points aren't a metric this project measures until v6. The model id lives in one constant (`EMBEDDING_MODEL_ID` in `src/rag/embedder.ts`); `EMBEDDING_VERSION` forces a re-embed if it ever changes.
+  - **The orchestration loop stays content-script-side.** The IndexedDB lives in claude.ai's page origin, which the offscreen document (a `chrome-extension://` origin) cannot see, so only a plain `texts -> vectors` call crosses to the offscreen document.
+  - Tiny chunks (under ~12 words) are embedded with trimmed neighbor text from the same message, never excluded and never changed in storage. A failed embedding is stored as `status: 'failed'` with a retry cap (`failureCount`, max 3), never as a vector. No exponential backoff — that is for Gemini's HTTP 429s, not local compute.
+  - The spec's "plus the user's typed question" is inert: no such input exists in the popup, so `buildSearchQueryText` takes an optional `typedQuestion` that every caller passes empty.
+  - Auto-scrolling the page to mount more of a virtualized chat was considered and rejected (it would move the user's reading position); the coverage line makes the gap visible instead.
+  - Also fixed during v3: `onupgradeneeded` now branches on `oldVersion`; deleting or replacing a message also deletes its orphaned embeddings; a message stuck "streaming" for 60 s is indexed anyway; overlapping index passes are serialized; blocked/superseded IndexedDB connections are handled.
+
+  **What went wrong in live testing, and what it taught (v3):**
+  1. **The offscreen document never appeared at all at first.** The extension's inspect views showed only the service worker, and both the content-script and background consoles showed "Could not establish connection. Receiving end does not exist." The relay/loading fixes for this are in commits `9b67c50` (answer embed messages with `sendResponse`), `2c4c08b` (load onnxruntime's WASM locally; use a model repo that actually ships a quantized file — the first-choice `onnx-community` repo did not) and `569e731` (verify the offscreen document is really alive instead of trusting `createDocument()`); the live session did not record which one fixed the missing-offscreen symptom specifically.
+  2. **After that fix, `chrome-extension://invalid` errors appeared. These were a stale content script, not a bug** — see "Development gotchas" above. Reloading the claude.ai tab cleared them.
+  3. **A harmless warning on first run** in the offscreen console: "Failed to cache ort-wasm-simd-threaded.asyncify.wasm: Request scheme 'chrome-extension' is unsupported". The WASM loads fine from inside the extension; only the Cache API write fails. Ignore it.
+  4. **Chunks stuck at `failureCount >= 3`** from before the fix would never be retried, so `window.__glossResetFailedEmbeddings()` was added and was needed in live testing to clear them (it deletes only `failed` records, never `done` ones, then re-indexes).
+
+  **Confirmed live on claude.ai (v3):**
+  - Search quality on a real chat: the query "lie detection accuracy" returned 5 relevant chunks with scores 0.59, 0.58, 0.46, 0.40, 0.40 — a clear gap between the top two and the rest.
+  - Coverage: **3 of ~36 messages were indexed without scrolling.** The virtualization limit is real and still unresolved; only messages that have been mounted in the DOM are searchable.
+
+  **Known open issues carried into v4:** virtualization coverage (above) — a long chat is only searchable where you have scrolled; formula/math rendering has still never been observed on a real page; the stale-content-script trap (see "Development gotchas"); the first run downloads the model (~23 MB) before any search works; the typed-question input does not exist yet.
+
+  **What was built (v4, built — awaiting live test):** Keyword search and fusion, ending at the console like v3. Our own BM25 (`src/rag/tokenize.ts`, `bm25.ts`) ranks the stored chunks; reciprocal rank fusion (`fusion.ts`, score = sum of 1/(60 + rank)) merges that with v3's embedding ranking; `hybrid.ts` ties them together. `window.__glossHybrid(text?, k?, depth?)` prints the embedding, BM25 and fused rankings side by side with each chunk's rank and score in every list, which terms matched, and an "own msg" column flagging chunks from the highlight's own message (kept deliberately so the self-match effect is visible before v5 decides anything). With no `text` it uses the current page selection and the real paragraph around it. The prompt, the popup, `__glossSearch`, the chunker and the IndexedDB schema are untouched. Plan: `docs/superpowers/plans/2026-10-04-highlight-explainer-v4.md`. Not yet confirmed live.
+
+  **Key decisions (v4):**
+  - **No persisted index.** Term statistics are rebuilt in memory on every search, so edits, regenerations and deletes are always correct. The one expensive step, tokenising, is skipped for unchanged chunks through an in-memory cache keyed by each chunk's own `textHash`.
+  - **Tokenisation:** an identifier like `pool_pre_ping` is indexed whole *and* as its parts (`pool`, `pre`, `ping`); snake_case, camelCase, acronyms and dotted paths are all split; dots, hyphens and other punctuation are separators; tokens over 40 characters (hashes, pasted keys) are dropped; no stemming. Stopwords are removed from the query only, so `not`/`in`/`is` stay findable in code, and an all-stopword highlight makes BM25 abstain.
+  - **The BM25 query is the highlighted text only** (the embedding query still carries the surrounding sentence), so the two lists contribute different signals.
+  - **Fusion:** 1-based ranks, constant 60, each list cut to `RRF_DEPTH` = 50 (a named constant, also a per-call argument). Chats with fewer embedded chunks than that are unaffected by the cap, and there a chunk is "bm25 only" only if it has no embedding. Ties break by chat order, never by chunk id (ids sort as strings, so `…:10:0` would sort before `…:2:0`). No "earlier chunk is better" bonus — that waits for v6 to measure it.
+  - **Done-when (weakened on purpose):** the chunk where an exact term is defined appears in the top-k, not necessarily rank 1 — BM25 finds where a term is densest, not where it first appeared.
+  - **Measured, not assumed:** `npm run bench` (synthetic text, plain timing; numbers and machine in `docs/benchmarks/2026-10-04-bm25-3000-chunks.md`). The first estimate was wrong — a cold 3000-chunk index build was ~580 ms — which is why the tokenizer fast path and the term-count cache exist. Now ~187 ms cold and ~32–49 ms warm at 3000 chunks (about 3 ms warm at 300).
+
+  **Known open issues (v4):** not tested live yet; the self-match effect (the highlight's own chunk ranks near the top of both lists) is visible but unhandled until v5; a one-word highlight like "it" gives BM25 nothing; `C++`, `$ref` and `@Override` lose their symbols in tokenising; BM25 numbers are from Node on synthetic text, not Chrome on real chats.

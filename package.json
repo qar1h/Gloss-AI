@@ -10,7 +10,8 @@
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bench": "vitest run --config bench/vitest.config.ts --disableConsoleIntercept"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
