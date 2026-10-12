@@ -18,6 +18,16 @@ interface Group {
   words: number;
 }
 
+/**
+ * The one place that turns blocks into text: a chunk is its blocks rendered this way, and the
+ * prompt's whole-message text (source, question, recent messages) is every block of the message
+ * rendered this way. Sharing it keeps excerpts and whole messages from drifting apart. Code
+ * blocks keep their raw newlines and indentation.
+ */
+export function blocksToText(blocks: Block[]): string {
+  return blocks.map((b) => b.text).join('\n\n');
+}
+
 export function groupBlocks(blocks: Block[]): { text: string; hasCode: boolean }[] {
   const groups: Group[] = [];
   let current: Group = { blocks: [], words: 0 };
@@ -68,7 +78,7 @@ export function groupBlocks(blocks: Block[]): { text: string; hasCode: boolean }
   }
 
   return groups.map((g) => ({
-    text: g.blocks.map((b) => b.text).join('\n\n'),
+    text: blocksToText(g.blocks),
     hasCode: g.blocks.some((b) => b.type === 'code'),
   }));
 }

@@ -116,13 +116,24 @@ export function describeLists(ranking: HybridRanking, depth: number): string {
 // conversation's entries when you switch chats. Lives only in memory; nothing is persisted.
 const termCache: Bm25TermCache = new Map();
 
+/**
+ * Drops every chunk of the given messages. v5 uses this for the messages already sent in
+ * full (the source, the user question, the recent messages), and it must run *before*
+ * ranking: filtering afterwards would leave those chunks occupying slots in the depth-capped
+ * lists and shift every other chunk's rank.
+ */
+export function excludeMessages(chunks: Chunk[], messageIds: ReadonlySet<string>): Chunk[] {
+  return messageIds.size === 0 ? chunks : chunks.filter((c) => !messageIds.has(c.messageId));
+}
+
 /** Reads a conversation's chunks + embeddings from IndexedDB once and ranks them. */
 export async function hybridSearch(
   conversationId: string,
   queryVector: number[] | null,
   bm25QueryText: string,
   depth = RRF_DEPTH,
+  excludeMessageIds: ReadonlySet<string> = new Set(),
 ): Promise<HybridRanking> {
   const [chunks, embeddings] = await Promise.all([getAllChunks(conversationId), getAllEmbeddings(conversationId)]);
-  return hybridRank(chunks, embeddings, queryVector, bm25QueryText, depth, termCache);
+  return hybridRank(excludeMessages(chunks, excludeMessageIds), embeddings, queryVector, bm25QueryText, depth, termCache);
 }

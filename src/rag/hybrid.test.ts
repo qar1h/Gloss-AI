@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDebugRows, describeLists, hybridRank } from './hybrid';
+import { buildDebugRows, describeLists, excludeMessages, hybridRank } from './hybrid';
 import type { Chunk, EmbeddingRecord } from './types';
 
 function makeChunk(id: string, text: string, overrides: Partial<Chunk> = {}): Chunk {
@@ -245,5 +245,41 @@ describe('describeLists', () => {
     const embeddings = chunks.map((c) => makeEmbedding(c.id, [1, 0]));
     const text = describeLists(hybridRank(chunks, embeddings, [1, 0], 'alpha', 3), 3);
     expect(text).toContain('cap binding on: embedding, bm25');
+  });
+});
+
+describe('excludeMessages', () => {
+  const chunks = [
+    makeChunk('a', 'one', { messageId: '2' }),
+    makeChunk('b', 'two', { messageId: '2', chunkIndex: 1 }),
+    makeChunk('c', 'three', { messageId: '5' }),
+  ];
+
+  it('removes every chunk of the listed messages and keeps the rest', () => {
+    expect(excludeMessages(chunks, new Set(['2'])).map((c) => c.id)).toEqual(['c']);
+  });
+
+  it('returns the chunks unchanged when nothing is excluded', () => {
+    expect(excludeMessages(chunks, new Set())).toEqual(chunks);
+  });
+});
+
+describe('hybridRank after excluding a message', () => {
+  it('ranks the remaining chunks from 1, as if the excluded message did not exist', () => {
+    const chunks = [
+      makeChunk('own', 'pool_pre_ping is defined right here', { messageId: '5', order: 5000 }),
+      makeChunk('other', 'notes about pool sizing', { messageId: '2', order: 2000 }),
+    ];
+    const embeddings = [makeEmbedding('own', [1, 0]), makeEmbedding('other', [0.5, 0.5])];
+    const query = [1, 0];
+
+    const withOwn = hybridRank(chunks, embeddings, query, 'pool_pre_ping');
+    expect(withOwn.embeddingList[0]!.chunk.id).toBe('own');
+
+    const without = hybridRank(excludeMessages(chunks, new Set(['5'])), embeddings, query, 'pool_pre_ping');
+    expect(fusedIds(without)).not.toContain('own');
+    expect(without.embeddingList.map((r) => r.chunk.id)).toEqual(['other']);
+    expect(without.fused[0]!.embeddingRank).toBe(1);
+    expect(without.fused[0]!.bm25Rank).toBe(1); // matches via the part "pool"
   });
 });

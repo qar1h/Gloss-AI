@@ -6,6 +6,8 @@ import { embedTexts, EMBEDDING_VERSION } from './embedder';
 import { buildEmbedInputForChunk, buildSearchQueryText } from './query';
 import { searchChunks } from './search';
 import { RRF_DEPTH } from './fusion';
+import { getCoverage } from './coverage';
+import { describeCoverageForConsole } from '@/context/report';
 import { buildDebugRows, describeLists, hybridSearch } from './hybrid';
 import {
   deleteEmbedding,
@@ -362,17 +364,7 @@ async function dumpSearch(conversationId: string, text: string, k: number): Prom
     })),
   );
 
-  const lastPosition = claudeAdapter.getLastMessagePosition();
-  const indexedCount = new Set((await getAllMessageRecords(conversationId)).map((r) => r.position)).size;
-  if (lastPosition !== null) {
-    console.log(
-      `[highlight-explainer] indexed ${indexedCount} of ~${lastPosition + 1} messages in this chat — scroll through more of it to include it in search.`,
-    );
-  } else {
-    console.log(
-      `[highlight-explainer] indexed ${indexedCount} messages in this chat (true chat length unknown — the last message isn't currently rendered).`,
-    );
-  }
+  console.log(`[highlight-explainer] ${describeCoverageForConsole(await getCoverage(conversationId))}`);
 }
 
 /**
@@ -426,17 +418,7 @@ async function dumpHybrid(conversationId: string, text?: string, k?: number, dep
   console.log(`[highlight-explainer] ${describeLists(ranking, effectiveDepth)}`);
   console.table(buildDebugRows(ranking, effectiveK, ownMessageIds));
 
-  const lastPosition = claudeAdapter.getLastMessagePosition();
-  const indexedCount = new Set((await getAllMessageRecords(conversationId)).map((r) => r.position)).size;
-  if (lastPosition !== null) {
-    console.log(
-      `[highlight-explainer] indexed ${indexedCount} of ~${lastPosition + 1} messages in this chat — scroll through more of it to include it in search.`,
-    );
-  } else {
-    console.log(
-      `[highlight-explainer] indexed ${indexedCount} messages in this chat (true chat length unknown — the last message isn't currently rendered).`,
-    );
-  }
+  console.log(`[highlight-explainer] ${describeCoverageForConsole(await getCoverage(conversationId))}`);
 }
 
 export function initIndexer(): () => void {

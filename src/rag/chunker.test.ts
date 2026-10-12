@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chunkMessage } from './chunker';
+import { blocksToText, chunkMessage, groupBlocks } from './chunker';
 import type { Block } from './types';
 
 const CONV = 'conv-1';
@@ -57,5 +57,31 @@ describe('chunkMessage', () => {
     expect(chunksB.every((c) => c.messageId === '1')).toBe(true);
     expect(chunksA.some((c) => c.text.includes('Message B'))).toBe(false);
     expect(chunksB.some((c) => c.text.includes('Message A'))).toBe(false);
+  });
+});
+
+describe('blocksToText', () => {
+  const code = 'def f():\n    return 1';
+
+  it('joins blocks with a blank line and keeps a code block exactly as it is, newlines and indentation included', () => {
+    const blocks: Block[] = [
+      { type: 'paragraph', text: 'Here is the function.' },
+      { type: 'code', text: code },
+      { type: 'paragraph', text: 'It returns one.' },
+    ];
+    expect(blocksToText(blocks)).toBe(`Here is the function.\n\n${code}\n\nIt returns one.`);
+  });
+
+  it('is empty for no blocks', () => {
+    expect(blocksToText([])).toBe('');
+  });
+
+  it('is exactly how a chunk renders its blocks, so a whole message and its excerpts can never disagree', () => {
+    const blocks: Block[] = [
+      { type: 'heading', text: 'Title' },
+      { type: 'paragraph', text: 'Some prose that stays in the same chunk as the heading.' },
+    ];
+    const [group] = groupBlocks(blocks);
+    expect(group!.text).toBe(blocksToText(blocks));
   });
 });

@@ -70,14 +70,36 @@
 
       <div class="checkbox-row">
         <input type="checkbox" id="debug-enabled" />
-        <label for="debug-enabled" style="margin: 0">Debug mode (log prompt + token count)</label>
+        <label for="debug-enabled" style="margin: 0">Debug mode (log the prompt report in the claude.ai page console)</label>
       </div>
 
-      <label for="retrieval-k">Search results to retrieve (k)</label>
-      <input type="number" id="retrieval-k" min="1" max="20" step="1" />
+      <label for="retrieval-k">Max excerpts per explanation (k)</label>
+      <input type="number" id="retrieval-k" min="1" max="50" step="1" />
       <p class="hint">
-        How many matching chunks <code>__glossSearch</code> shows by default in the
-        console. Retrieval isn't used in the explain answer yet.
+        The most retrieved excerpts added to an explain prompt (the token budget can stop it
+        sooner). Also the default number of results <code>__glossSearch</code> and
+        <code>__glossHybrid</code> print.
+      </p>
+
+      <label for="prompt-budget">Prompt budget (estimated tokens)</label>
+      <input type="number" id="prompt-budget" min="500" step="1" />
+      <p class="hint">
+        Size limit for the whole prompt, estimated as characters ÷ 4. The highlight, its
+        paragraph, the message and the nearby messages always go in; excerpts fill the rest.
+      </p>
+
+      <label for="full-chat-threshold">Send the whole chat below (estimated tokens)</label>
+      <input type="number" id="full-chat-threshold" min="500" step="1" />
+      <p class="hint">
+        If everything indexed from the chat fits under this, no search is done and all of it is
+        sent. Keep it equal to the budget to avoid a sudden drop in prompt size.
+      </p>
+
+      <label for="recent-count">Nearby messages always included</label>
+      <input type="number" id="recent-count" min="0" max="6" step="1" />
+      <p class="hint">
+        How many messages right before the explained one are always sent. The user question that
+        produced the answer counts as one of them.
       </p>
 
       <button type="submit">Save</button>

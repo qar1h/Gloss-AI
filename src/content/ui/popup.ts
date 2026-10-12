@@ -47,6 +47,17 @@ const STYLE = `
   .popup-body { padding: 12px; }
   .popup-body p:first-child { margin-top: 0; }
   .popup-body p:last-child { margin-bottom: 0; }
+  .popup-note {
+    display: none;
+    position: sticky;
+    bottom: 0;
+    padding: 6px 12px;
+    border-top: 1px solid #eee;
+    background: #fff;
+    color: #777;
+    font-size: 12px;
+  }
+  .popup-note.visible { display: block; }
   .popup-loading { color: #666; }
   .popup-error { color: #b00020; }
 `;
@@ -56,12 +67,15 @@ export interface PopupHandle {
   appendChunk(text: string): void;
   markDone(): void;
   showError(message: string): void;
+  /** The muted line under the answer saying what the explanation was based on. Empty text hides it. */
+  setContextNote(text: string): void;
   close(): void;
 }
 
 export async function createPopup(ctx: ContentScriptContext): Promise<PopupHandle> {
   let popupEl: HTMLDivElement | null = null;
   let bodyEl: HTMLDivElement | null = null;
+  let noteEl: HTMLDivElement | null = null;
   let hostEl: HTMLElement | null = null;
 
   let buffer = '';
@@ -126,11 +140,15 @@ export async function createPopup(ctx: ContentScriptContext): Promise<PopupHandl
       const body = document.createElement('div');
       body.className = 'popup-body';
 
-      popup.append(header, body);
+      const note = document.createElement('div');
+      note.className = 'popup-note';
+
+      popup.append(header, body, note);
       container.append(popup);
 
       popupEl = popup;
       bodyEl = body;
+      noteEl = note;
     },
   });
   ui.mount();
@@ -138,6 +156,11 @@ export async function createPopup(ctx: ContentScriptContext): Promise<PopupHandl
   return {
     open(anchorRect: DOMRect, onClose: () => void) {
       if (!popupEl || !bodyEl) return;
+
+      // A popup that is still open belongs to an earlier request (e.g. the Explain button was
+      // activated from the keyboard, which never triggers the outside-click close). Close it
+      // properly first so its onClose runs and its port disconnects.
+      if (popupEl.classList.contains('visible')) close();
 
       buffer = '';
       activeOnClose = onClose;
@@ -148,6 +171,7 @@ export async function createPopup(ctx: ContentScriptContext): Promise<PopupHandl
       popupEl.style.left = `${Math.max(8, left)}px`;
 
       bodyEl.innerHTML = '<p class="popup-loading">Thinking…</p>';
+      noteEl?.classList.remove('visible');
       popupEl.classList.add('visible');
       attachGlobalListeners();
     },
@@ -167,6 +191,12 @@ export async function createPopup(ctx: ContentScriptContext): Promise<PopupHandl
       if (!bodyEl) return;
       bodyEl.innerHTML = `<p class="popup-error"></p>`;
       bodyEl.querySelector('p')!.textContent = message;
+    },
+
+    setContextNote(text: string) {
+      if (!noteEl) return;
+      noteEl.textContent = text;
+      noteEl.classList.toggle('visible', text.length > 0);
     },
 
     close,

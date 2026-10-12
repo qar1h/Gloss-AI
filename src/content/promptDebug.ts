@@ -1,0 +1,99 @@
+// Console tools for seeing exactly what an Explain click sends, and why.
+//   __glossPrompt(text?, opts?)  dry run: builds the same prompt a click would, calls nothing
+//   __glossLastPrompt()          reprints the prompt of the last real click
+// With the debug toggle on, every real click also prints this report. Everything goes to the
+// console only — prompts contain real chat text and are never written anywhere.
+
+import { claudeAdapter } from '@/sites/claude';
+import { getSettings } from '@/options/storage';
+import { finalizeFocal } from '@/context/focal';
+import { prepareExplainPrompt, type DebugOverride, type PreparedExplain } from '@/context/gather';
+import { resolveRecentCount } from '@/context/limits';
+import { candidateTable, describeCoverageForConsole, sectionTable, summaryLines } from '@/context/report';
+import type { RawFocal } from '@/context/types';
+import { rawFocalForMessage, readRawFocal } from './readFocal';
+
+const TAG = '[highlight-explainer]';
+
+export interface PromptDebugOptions {
+  /** Force full-chat or retrieval, whatever the length switch would pick. */
+  mode?: 'full' | 'retrieval';
+  /** Override the budget / threshold / excerpt cap for this call only. */
+  budget?: number;
+  threshold?: number;
+  k?: number;
+}
+
+let lastPrepared: PreparedExplain | null = null;
+
+export function recordPrepared(prepared: PreparedExplain): void {
+  lastPrepared = prepared;
+}
+
+export function printPrepared(prepared: PreparedExplain, label: string): void {
+  const { report, prompt } = prepared.assembled;
+  console.log(`${TAG} ${label}`);
+  for (const line of summaryLines(report)) console.log(`${TAG} ${line}`);
+  console.log(`${TAG} ${describeCoverageForConsole(prepared.coverage)}`);
+  if (report.candidates.length > 0) {
+    console.log(`${TAG} candidates (what retrieval returned, and what assembly did with each):`);
+    console.table(candidateTable(report));
+  }
+  console.log(`${TAG} tokens per section (est.):`);
+  console.table(sectionTable(report));
+  console.log(`${TAG} final prompt:\n${prompt}`);
+}
+
+async function dryRun(textOrOptions?: string | PromptDebugOptions, maybeOptions?: PromptDebugOptions): Promise<void> {
+  const text = typeof textOrOptions === 'string' ? textOrOptions : undefined;
+  const options = (typeof textOrOptions === 'object' ? textOrOptions : maybeOptions) ?? {};
+
+  let raw: RawFocal | null;
+  const selection = window.getSelection();
+  if (text !== undefined) {
+    // Typed text: use the first mounted message that contains it as the source message.
+    const message = claudeAdapter
+      .getAllMessages()
+      .find((m) => claudeAdapter.getMessageText(m.element).includes(text));
+    if (!message) {
+      console.warn(`${TAG} no message currently on the page contains that text.`);
+      return;
+    }
+    raw = rawFocalForMessage(message, text, text);
+  } else if (selection && selection.rangeCount > 0 && !selection.isCollapsed && selection.toString().trim()) {
+    raw = readRawFocal(selection.getRangeAt(0), selection.toString().trim());
+  } else {
+    console.warn(`${TAG} select some text in a message first, or pass text: __glossPrompt("text")`);
+    return;
+  }
+  if (!raw) {
+    console.warn(`${TAG} the selection is not inside a recognized chat message.`);
+    return;
+  }
+
+  const settings = await getSettings();
+  const focal = finalizeFocal(raw, resolveRecentCount(settings.recentMessageCount));
+  const override: DebugOverride = {
+    mode: options.mode,
+    budgetTokens: options.budget,
+    thresholdTokens: options.threshold,
+    maxChunks: options.k,
+  };
+  const prepared = await prepareExplainPrompt(claudeAdapter.getConversationId(), focal, settings, override);
+  printPrepared(prepared, 'dry run — this is what an Explain click would send (nothing was sent):');
+}
+
+export function initPromptDebug(): void {
+  const w = window as unknown as {
+    __glossPrompt?: typeof dryRun;
+    __glossLastPrompt?: () => void;
+  };
+  w.__glossPrompt = dryRun;
+  w.__glossLastPrompt = () => {
+    if (!lastPrepared) {
+      console.warn(`${TAG} no Explain click yet in this tab.`);
+      return;
+    }
+    printPrepared(lastPrepared, 'prompt from the last Explain click:');
+  };
+}

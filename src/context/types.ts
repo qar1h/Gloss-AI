@@ -1,0 +1,125 @@
+// Shared shapes for prompt assembly. Type-only, no runtime code.
+
+import type { Chunk } from '../rag/types';
+
+export type Role = 'user' | 'assistant';
+
+export interface PromptMessage {
+  /** The site's own row index (claude.ai `data-index`), as a string. */
+  id: string;
+  role: Role;
+  text: string;
+}
+
+/**
+ * Why there is (or isn't) a question:
+ *   found          — the user message that produced the answer was read.
+ *   not-applicable — the highlighted message is itself a user message.
+ *   not-loaded     — the page has a gap right before the message (claude.ai virtualization), so
+ *                    the question isn't mounted; the nearest mounted user row is NOT it.
+ *   none           — the walk reached the start of the chat without finding a user message.
+ * (A question whose text is empty is a separate case, detected at assembly time.)
+ */
+export type QuestionStatus = 'found' | 'not-applicable' | 'not-loaded' | 'none';
+
+/** QuestionStatus plus the assembly-time case of a question message with no readable text. */
+export type QuestionState = QuestionStatus | 'empty';
+
+/** What the DOM gives us for one highlight, before the recent-message setting is applied. */
+export interface RawFocal {
+  highlight: string;
+  paragraph: string;
+  source: PromptMessage;
+  question: PromptMessage | null;
+  questionStatus: QuestionStatus;
+  /** Up to MAX_RECENT_COUNT messages immediately before the source, contiguous, chat order (oldest first). */
+  preceding: PromptMessage[];
+  /** The walk back stopped at a gap in the page, not at the start of the chat, with fewer than MAX_RECENT_COUNT found. */
+  precedingEndsAtGap: boolean;
+}
+
+/** The always-include material for one explain request. */
+export interface FocalInput {
+  highlight: string;
+  paragraph: string;
+  source: PromptMessage;
+  question: PromptMessage | null;
+  questionStatus: QuestionStatus;
+  /** Messages just before the source, chat order, with the question message removed (it has its own slot). */
+  recent: PromptMessage[];
+  /** Recent messages too big to always include (see RECENT_ALWAYS_MAX_TOKENS); not in `recent`, and not excluded from retrieval. */
+  demotedRecent: { id: string; estTokens: number }[];
+  /** Set only when the page has a gap and fewer nearby messages were found than asked for. */
+  recentShortfall: { wanted: number; found: number } | null;
+}
+
+/** One entry of the fused retrieval ranking. */
+export interface Candidate {
+  chunk: Chunk;
+  fusedRank: number;
+  embeddingRank: number | null;
+  bm25Rank: number | null;
+}
+
+export type Mode = 'full' | 'retrieval';
+
+export type Decision = 'included' | 'duplicate' | 'cap' | 'too-big' | 'no-room';
+
+export interface CandidateRow {
+  /** null in full mode, where there is no ranking. */
+  fusedRank: number | null;
+  /** `${messageId}:${chunkIndex}` */
+  chunk: string;
+  role: Role;
+  estTokens: number;
+  embeddingRank: number | null;
+  bm25Rank: number | null;
+  decision: Decision;
+  detail: string;
+  /** Running prompt total (est. tokens) after this decision. */
+  runningTokens: number;
+  preview: string;
+}
+
+export interface SectionSize {
+  name: string;
+  estTokens: number;
+}
+
+export interface PromptReport {
+  mode: Mode;
+  modeReason: string;
+  budgetTokens: number;
+  thresholdTokens: number;
+  maxChunks: number;
+  totalEstTokens: number;
+  /** Instructions + always-include sections, before any excerpt. */
+  fixedEstTokens: number;
+  excerptCount: number;
+  includedChunkIds: string[];
+  candidates: CandidateRow[];
+  sections: SectionSize[];
+  /** Names of items that hit a per-item ceiling and were trimmed. */
+  trimmed: string[];
+  warnings: string[];
+  /** Why retrieval was degraded or skipped, if it was (embedding failure, unreadable index…). */
+  retrievalNote: string | null;
+  excludedMessageIds: string[];
+  excludedChunkCount: number;
+  /** Recent messages left to retrieval because they were too big to always include. */
+  demotedRecent: { id: string; estTokens: number }[];
+  questionState: QuestionState;
+  recentShortfall: { wanted: number; found: number } | null;
+}
+
+export interface AssembledPrompt {
+  prompt: string;
+  report: PromptReport;
+}
+
+/** How much of the chat the index covers. */
+export interface Coverage {
+  indexedMessages: number;
+  /** The chat's true length, only known while its last row is mounted. */
+  totalMessages: number | null;
+}

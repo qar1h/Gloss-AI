@@ -1,9 +1,9 @@
-// Handles one 'explain' Port connection: reads context, builds the prompt, calls
-// Gemini, and streams chunks/done/error back over the port. `browser` and `Browser`
-// are auto-imported project-wide by WXT.
+// Handles one 'explain' Port connection: receives the finished prompt, calls Gemini, and
+// streams chunks/done/error back over the port. The content script assembles the prompt
+// (it owns the chat index), and logs it when debug is on. `browser` and `Browser` are
+// auto-imported project-wide by WXT.
 
 import { EXPLAIN_PORT_NAME, type ExplainToBackground, type ExplainToContent } from '@/messaging/types';
-import { buildPrompt } from '@/context/prompt';
 import { createGeminiProvider, DEFAULT_MODEL_ID } from '@/llm/gemini';
 import { getSettings } from '@/options/storage';
 
@@ -16,7 +16,7 @@ function send(port: Browser.runtime.Port, message: ExplainToContent): void {
 }
 
 async function handleRequest(port: Browser.runtime.Port, message: ExplainToBackground, signal: AbortSignal): Promise<void> {
-  const { requestId, context } = message;
+  const { requestId, prompt } = message;
 
   const settings = await getSettings();
   if (!settings.apiKey) {
@@ -26,13 +26,6 @@ async function handleRequest(port: Browser.runtime.Port, message: ExplainToBackg
       message: 'No Gemini API key set. Add one on the extension options page.',
     });
     return;
-  }
-
-  const prompt = buildPrompt(context);
-
-  if (settings.debugEnabled) {
-    console.log('[highlight-explainer] prompt sent to Gemini:\n' + prompt);
-    console.log('[highlight-explainer] approx tokens:', Math.ceil(prompt.length / 4));
   }
 
   const provider = createGeminiProvider(settings.apiKey, settings.modelId || DEFAULT_MODEL_ID);

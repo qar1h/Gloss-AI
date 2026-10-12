@@ -10,21 +10,59 @@ export interface SiteMessage {
   element: HTMLElement;
 }
 
+/** A message read from the page: its id is the site's own row index, as a string; its text is getMessageContent-style. */
+export interface SiteTextMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+/** The result of looking for the user message that produced an assistant message. */
+export interface QuestionLookup {
+  message: SiteTextMessage | null;
+  /** Why `message` is null: 'not-loaded' = the page has a gap right before it; 'none' = the chat starts there. */
+  status: 'found' | 'not-loaded' | 'none';
+}
+
+/** The result of reading the messages just before a message. */
+export interface RecentLookup {
+  /** Contiguous with the message (no gap), chat order, oldest first. */
+  messages: SiteTextMessage[];
+  /** Fewer than asked for were found because the page has a gap, not because the chat starts there. */
+  endsAtGap: boolean;
+}
+
 export interface SiteAdapter {
   /** Find the chat message that contains the given DOM node, if any. */
   getMessageForNode(node: Node): SiteMessage | null;
 
-  /** Extract the plain text of a message element. */
+  /**
+   * Extract the plain text of a message element, flattened to one line. Used as a cheap
+   * change-detection key by the indexer; NOT for the prompt (it destroys code formatting).
+   */
   getMessageText(el: HTMLElement): string;
+
+  /**
+   * A message's text for the prompt: built from the same blocks the chunker indexes, rendered
+   * by the same function, so code keeps its newlines and indentation.
+   */
+  getMessageContent(el: HTMLElement): string;
 
   /** Extract the paragraph of text surrounding a selection range. */
   getParagraphAround(range: Range): string;
 
-  /** Find the user message that produced the given assistant message, if any. */
-  getUserQuestionFor(assistantMessageId: string): string | null;
+  /**
+   * Find the user message that produced the given assistant message. Only rows contiguous with
+   * it count: across a gap in the mounted rows (virtualization) the nearest mounted user
+   * message is NOT its question, so the result says 'not-loaded' instead of guessing.
+   */
+  getUserQuestionFor(assistantMessageId: string): QuestionLookup;
 
-  /** Get up to `count` messages before the given message id, in chat order. */
-  getRecentMessages(beforeId: string, count: number): { role: 'user' | 'assistant'; text: string }[];
+  /**
+   * Get up to `count` messages immediately before the given message id, in chat order, stopping
+   * at the first gap in the mounted rows.
+   */
+  getRecentMessages(beforeId: string, count: number): RecentLookup;
 
   /** Watch a message element for streaming updates. Returns an unsubscribe function. */
   watchForStreamingUpdate(el: HTMLElement, onUpdate: () => void): () => void;

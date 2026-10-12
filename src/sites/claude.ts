@@ -11,8 +11,10 @@
 //   Assistant text lives at [data-cds="Prose"] [data-perf-reply-text]
 //     (this correctly excludes the "Thought for Xs" status pill, which is a sibling, not a parent)
 
-import type { SiteAdapter, SiteMessage } from './types';
+import type { QuestionLookup, RecentLookup, SiteAdapter, SiteMessage, SiteTextMessage } from './types';
+import { contiguousPrecedingRun } from './contiguity';
 import type { Block, BlockType } from '@/rag/types';
+import { blocksToText } from '../rag/chunker'; // relative on purpose: keeps this file loadable under vitest, which has no `@/` alias
 
 const ROW_SELECTOR = '[data-testid="transcript-row"]';
 const FEED_SELECTOR = 'div[role="feed"][data-perf-region="transcript"]';
@@ -35,6 +37,21 @@ function textOf(row: HTMLElement, role: 'user' | 'assistant'): string {
   const selector = role === 'user' ? USER_TEXT_SELECTOR : ASSISTANT_TEXT_SELECTOR;
   const contentEl = row.querySelector(selector);
   return normalizeWhitespace(contentEl?.textContent ?? '');
+}
+
+/**
+ * A message's whole text for the prompt, built from the SAME blocks the chunker indexes and
+ * rendered by the same function (blocksToText), so a whole message and its excerpts can't
+ * drift apart. Unlike textOf (everything flattened to one line, which also glues the code
+ * block's language label onto its first line), code keeps its newlines and indentation.
+ * Falls back to the flat text only when the message has no recognised blocks at all.
+ */
+function contentOf(row: HTMLElement, role: 'user' | 'assistant'): string {
+  const selector = role === 'user' ? USER_TEXT_SELECTOR : ASSISTANT_TEXT_SELECTOR;
+  const contentEl = row.querySelector<HTMLElement>(selector);
+  if (!contentEl) return '';
+  const blocks = getBlocks(contentEl);
+  return blocks.length > 0 ? blocksToText(blocks) : normalizeWhitespace(contentEl.textContent ?? '');
 }
 
 function closestRow(node: Node): HTMLElement | null {
@@ -87,14 +104,28 @@ function getBlocks(messageRoot: HTMLElement): Block[] {
   });
 }
 
-function precedingRows(row: HTMLElement): HTMLElement[] {
+/** Every row before `row` in the DOM, nearest-first, whether or not it is the previous *message*. */
+function domPrecedingRows(row: HTMLElement): HTMLElement[] {
   const rows: HTMLElement[] = [];
   let sibling = row.previousElementSibling;
   while (sibling) {
     if (sibling.matches(ROW_SELECTOR)) rows.push(sibling as HTMLElement);
     sibling = sibling.previousElementSibling;
   }
-  return rows; // nearest-first (reverse chat order)
+  return rows;
+}
+
+/**
+ * The rows that really are the messages just before `row` in the chat, nearest-first. claude.ai
+ * virtualizes long chats, so the mounted rows can be disconnected islands, and the previous row
+ * in the DOM is not necessarily the previous message (seen live: 217's DOM neighbour was 126).
+ * The walk stops at the first break in `data-index`, counting EVERY row, including ones this
+ * adapter doesn't recognise as messages. `endsAtGap` is false only when the run reached message 0.
+ */
+function precedingRun(row: HTMLElement): { rows: HTMLElement[]; endsAtGap: boolean } {
+  const all = [row, ...domPrecedingRows(row)];
+  const run = contiguousPrecedingRun(all.map((r) => Number(r.dataset.index)));
+  return { rows: all.slice(1, 1 + run.length), endsAtGap: run.endsAtGap };
 }
 
 export const claudeAdapter: SiteAdapter = {
@@ -113,6 +144,12 @@ export const claudeAdapter: SiteAdapter = {
     return textOf(el, role);
   },
 
+  getMessageContent(el: HTMLElement): string {
+    const role = roleFromRow(el);
+    if (!role) return '';
+    return contentOf(el, role);
+  },
+
   getParagraphAround(range: Range): string {
     const block = closestRow(range.commonAncestorContainer)
       ? (range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
@@ -120,30 +157,41 @@ export const claudeAdapter: SiteAdapter = {
           : range.commonAncestorContainer.parentElement
         )?.closest(BLOCK_SELECTOR)
       : null;
-    return normalizeWhitespace(block?.textContent ?? range.toString());
+    // Same per-block text the chunker uses: a code block keeps its newlines (a flattened
+    // one-line "paragraph" would not even match the selection's own line breaks).
+    return block ? blockText(block, blockType(block)) : normalizeWhitespace(range.toString());
   },
 
-  getUserQuestionFor(assistantMessageId: string): string | null {
+  getUserQuestionFor(assistantMessageId: string): QuestionLookup {
     const row = allRows().find((r) => r.dataset.index === assistantMessageId);
-    if (!row) return null;
-    for (const candidate of precedingRows(row)) {
+    if (!row) return { message: null, status: 'not-loaded' };
+    const { rows, endsAtGap } = precedingRun(row);
+    for (const candidate of rows) {
       const role = roleFromRow(candidate);
-      if (role === 'user') return textOf(candidate, 'user');
+      const id = candidate.dataset.index;
+      if (role === 'user' && id !== undefined) {
+        return { message: { id, role, text: contentOf(candidate, 'user') }, status: 'found' };
+      }
     }
-    return null;
+    return { message: null, status: endsAtGap ? 'not-loaded' : 'none' };
   },
 
-  getRecentMessages(beforeId: string, count: number): { role: 'user' | 'assistant'; text: string }[] {
+  getRecentMessages(beforeId: string, count: number): RecentLookup {
     const row = allRows().find((r) => r.dataset.index === beforeId);
-    if (!row) return [];
-    const nearestFirst = precedingRows(row).slice(0, count);
-    return nearestFirst
-      .reverse() // back to chat order
-      .map((r) => {
-        const role = roleFromRow(r);
-        return role ? { role, text: textOf(r, role) } : null;
-      })
-      .filter((m): m is { role: 'user' | 'assistant'; text: string } => m !== null);
+    if (!row) return { messages: [], endsAtGap: true };
+    const { rows, endsAtGap } = precedingRun(row);
+
+    const nearestFirst: SiteTextMessage[] = [];
+    for (const r of rows) {
+      if (nearestFirst.length >= count) break;
+      const role = roleFromRow(r);
+      const id = r.dataset.index;
+      if (role && id !== undefined) nearestFirst.push({ id, role, text: contentOf(r, role) });
+    }
+    return {
+      messages: nearestFirst.reverse(), // back to chat order
+      endsAtGap: nearestFirst.length < count && endsAtGap,
+    };
   },
 
   watchForStreamingUpdate(el: HTMLElement, onUpdate: () => void): () => void {
