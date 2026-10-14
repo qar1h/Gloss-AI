@@ -1,0 +1,393 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`claude adapter on captured fixtures (golden) > a gap in the mounted rows is reported, not bridged (the v5 island bug) 1`] = `
+{
+  "conversationId": "test-conversation",
+  "lastPosition": 3,
+  "messages": [
+    {
+      "blockTypes": [
+        "paragraph",
+      ],
+      "blocksSha": "f086f67fd07c",
+      "contentSha": "378518fb117d",
+      "id": "0",
+      "paragraphSha": "10d4320612d7",
+      "question": null,
+      "recent": {
+        "endsAtGap": false,
+        "ids": [],
+        "textShas": [],
+      },
+      "role": "user",
+      "streaming": false,
+      "textSha": "378518fb117d",
+    },
+    {
+      "blockTypes": [
+        "paragraph",
+      ],
+      "blocksSha": "70bd7a65430a",
+      "contentSha": "bd880f3bc55d",
+      "id": "2",
+      "paragraphSha": "36ed3f63d924",
+      "question": null,
+      "recent": {
+        "endsAtGap": true,
+        "ids": [],
+        "textShas": [],
+      },
+      "role": "user",
+      "streaming": false,
+      "textSha": "bd880f3bc55d",
+    },
+    {
+      "blockTypes": [
+        "paragraph",
+        "paragraph",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "paragraph",
+      ],
+      "blocksSha": "6f12af1efe5a",
+      "contentSha": "ed64f4e96649",
+      "id": "3",
+      "paragraphSha": "62721ceb5f30",
+      "question": {
+        "id": "2",
+        "status": "found",
+        "textSha": "bd880f3bc55d",
+      },
+      "recent": {
+        "endsAtGap": true,
+        "ids": [
+          "2",
+        ],
+        "textShas": [
+          "bd880f3bc55d",
+        ],
+      },
+      "role": "assistant",
+      "streaming": false,
+      "textSha": "f19cd885ae5b",
+    },
+  ],
+  "unrecognized": [],
+}
+`;
+
+exports[`claude adapter on captured fixtures (golden) > claude-code-message.html (an answer that is a code block, wrapped in a row) 1`] = `
+{
+  "conversationId": "test-conversation",
+  "lastPosition": null,
+  "messages": [
+    {
+      "blockTypes": [
+        "code",
+      ],
+      "blocksSha": "a042356c518a",
+      "contentSha": "1893d4c35df7",
+      "id": "1",
+      "paragraphSha": "1893d4c35df7",
+      "question": {
+        "id": null,
+        "status": "not-loaded",
+        "textSha": null,
+      },
+      "recent": {
+        "endsAtGap": true,
+        "ids": [],
+        "textShas": [],
+      },
+      "role": "assistant",
+      "streaming": false,
+      "textSha": "f733f5b9daf0",
+    },
+  ],
+  "unrecognized": [],
+}
+`;
+
+exports[`claude adapter on captured fixtures (golden) > claude-message.html (one assistant answer, wrapped in a row) 1`] = `
+{
+  "conversationId": "test-conversation",
+  "lastPosition": null,
+  "messages": [
+    {
+      "blockTypes": [
+        "heading",
+        "paragraph",
+        "heading",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "heading",
+        "paragraph",
+        "heading",
+        "paragraph",
+        "paragraph",
+      ],
+      "blocksSha": "903de0cc4026",
+      "contentSha": "a8d3d98c9d26",
+      "id": "1",
+      "paragraphSha": "e8b6f38ba339",
+      "question": {
+        "id": null,
+        "status": "not-loaded",
+        "textSha": null,
+      },
+      "recent": {
+        "endsAtGap": true,
+        "ids": [],
+        "textShas": [],
+      },
+      "role": "assistant",
+      "streaming": false,
+      "textSha": "f584b2bfe3db",
+    },
+  ],
+  "unrecognized": [],
+}
+`;
+
+exports[`claude adapter on captured fixtures (golden) > claude-user-message.html (one user message, wrapped in a row) 1`] = `
+{
+  "conversationId": "test-conversation",
+  "lastPosition": null,
+  "messages": [
+    {
+      "blockTypes": [
+        "paragraph",
+      ],
+      "blocksSha": "70bd7a65430a",
+      "contentSha": "bd880f3bc55d",
+      "id": "0",
+      "paragraphSha": "bd880f3bc55d",
+      "question": null,
+      "recent": {
+        "endsAtGap": false,
+        "ids": [],
+        "textShas": [],
+      },
+      "role": "user",
+      "streaming": false,
+      "textSha": "bd880f3bc55d",
+    },
+  ],
+  "unrecognized": [],
+}
+`;
+
+exports[`claude adapter on captured fixtures (golden) > long-chat-with-code.html (hand-built rows with code blocks) 1`] = `
+{
+  "conversationId": "test-conversation",
+  "lastPosition": 1,
+  "messages": [
+    {
+      "blockTypes": [
+        "paragraph",
+      ],
+      "blocksSha": "20aedd1d6d7c",
+      "contentSha": "574f79810f18",
+      "id": "0",
+      "paragraphSha": "574f79810f18",
+      "question": null,
+      "recent": {
+        "endsAtGap": false,
+        "ids": [],
+        "textShas": [],
+      },
+      "role": "user",
+      "streaming": false,
+      "textSha": "574f79810f18",
+    },
+    {
+      "blockTypes": [
+        "heading",
+        "paragraph",
+        "heading",
+        "paragraph",
+        "heading",
+        "code",
+        "paragraph",
+      ],
+      "blocksSha": "eb72044ba0b8",
+      "contentSha": "d6c9fef96896",
+      "id": "1",
+      "paragraphSha": "f881c6cf6680",
+      "question": {
+        "id": "0",
+        "status": "found",
+        "textSha": "574f79810f18",
+      },
+      "recent": {
+        "endsAtGap": false,
+        "ids": [
+          "0",
+        ],
+        "textShas": [
+          "574f79810f18",
+        ],
+      },
+      "role": "assistant",
+      "streaming": false,
+      "textSha": "5054c13b6f23",
+    },
+  ],
+  "unrecognized": [],
+}
+`;
+
+exports[`claude adapter on captured fixtures (golden) > short-chat.html (4 real rows) 1`] = `
+{
+  "conversationId": "test-conversation",
+  "lastPosition": 3,
+  "messages": [
+    {
+      "blockTypes": [
+        "paragraph",
+      ],
+      "blocksSha": "f086f67fd07c",
+      "contentSha": "378518fb117d",
+      "id": "0",
+      "paragraphSha": "10d4320612d7",
+      "question": null,
+      "recent": {
+        "endsAtGap": false,
+        "ids": [],
+        "textShas": [],
+      },
+      "role": "user",
+      "streaming": false,
+      "textSha": "378518fb117d",
+    },
+    {
+      "blockTypes": [
+        "heading",
+        "paragraph",
+        "heading",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "heading",
+        "paragraph",
+        "heading",
+        "paragraph",
+        "paragraph",
+      ],
+      "blocksSha": "903de0cc4026",
+      "contentSha": "a8d3d98c9d26",
+      "id": "1",
+      "paragraphSha": "c93d884d249c",
+      "question": {
+        "id": "0",
+        "status": "found",
+        "textSha": "378518fb117d",
+      },
+      "recent": {
+        "endsAtGap": false,
+        "ids": [
+          "0",
+        ],
+        "textShas": [
+          "378518fb117d",
+        ],
+      },
+      "role": "assistant",
+      "streaming": false,
+      "textSha": "f584b2bfe3db",
+    },
+    {
+      "blockTypes": [
+        "paragraph",
+      ],
+      "blocksSha": "70bd7a65430a",
+      "contentSha": "bd880f3bc55d",
+      "id": "2",
+      "paragraphSha": "36ed3f63d924",
+      "question": null,
+      "recent": {
+        "endsAtGap": false,
+        "ids": [
+          "0",
+          "1",
+        ],
+        "textShas": [
+          "378518fb117d",
+          "a8d3d98c9d26",
+        ],
+      },
+      "role": "user",
+      "streaming": false,
+      "textSha": "bd880f3bc55d",
+    },
+    {
+      "blockTypes": [
+        "paragraph",
+        "paragraph",
+        "list-item",
+        "list-item",
+        "list-item",
+        "list-item",
+        "paragraph",
+      ],
+      "blocksSha": "6f12af1efe5a",
+      "contentSha": "ed64f4e96649",
+      "id": "3",
+      "paragraphSha": "62721ceb5f30",
+      "question": {
+        "id": "2",
+        "status": "found",
+        "textSha": "bd880f3bc55d",
+      },
+      "recent": {
+        "endsAtGap": false,
+        "ids": [
+          "0",
+          "1",
+          "2",
+        ],
+        "textShas": [
+          "378518fb117d",
+          "a8d3d98c9d26",
+          "bd880f3bc55d",
+        ],
+      },
+      "role": "assistant",
+      "streaming": false,
+      "textSha": "f19cd885ae5b",
+    },
+  ],
+  "unrecognized": [],
+}
+`;

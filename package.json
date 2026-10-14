@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.2.9",
+    "linkedom": "^0.18.13",
     "typescript": "^5.9.3",
     "vite": "^8.3.0",
     "vitest": "^5.0.0",
