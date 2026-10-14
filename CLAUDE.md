@@ -141,6 +141,7 @@ I chose to add features before v6. The versions below (v7–v13) are built **one
 - **I test all three myself first and report what breaks.** Do not guess at fixes before I report.
 - Likely trouble spots: Brave Shields blocking the Gemini call, and Brave's storage partitioning affecting IndexedDB or the offscreen document.
 - **Done when:** the explain flow works in all three, or the ones that don't are written up as known limitations with the reason.
+- **Status: COMPLETE. No code changes were needed** (see the v7 notes under "Current status").
 
 ### v8: ChatGPT support
 - A second `SiteAdapter`. All claude.ai knowledge lives in `src/sites/claude.ts` behind the `SiteAdapter` interface, so this is the test of that design.
@@ -197,7 +198,7 @@ I chose to add features before v6. The versions below (v7–v13) are built **one
 - Site HTML changes can break the adapter. **Supporting three sites (v8, v11) triples that maintenance:** when any one of them redesigns, only that site's adapter should need fixing, but each of the three can break independently and at any time. **Each site needs its own captured fixtures** in `fixtures/` (real HTML, never hand-written for selector work), and the adapter's selectors are checked against them.
 - Free-tier limits can change, and Google may use free-tier inputs to improve its models.
 - **Retrieval widens what leaves my machine.** Before v5, only the nearby messages went to Gemini. Now any chunk of the chat can be sent, including credentials, API keys or tokens I pasted into a chat much earlier. No redaction is built; this is a known, accepted risk. `__glossPrompt()` shows exactly what a click would send before I click.
-- Desktop Chromium browsers only (Chrome; Brave, Opera and Vivaldi are being verified in v7). No Firefox or Safari.
+- Desktop Chromium browsers only: Chrome, plus Brave, Opera and Vivaldi (verified in v7). No Firefox or Safari.
 
 ## Communication with the user
 
@@ -212,9 +213,9 @@ I chose to add features before v6. The versions below (v7–v13) are built **one
 
 ## Current status
 
-- **Current version:** v7 (browser compatibility), not started. I test Brave, Opera and Vivaldi myself first and report what breaks; do not start before that.
-- **Completed versions:** v1, v2, v3, v4, v5
-- **Remaining order:** v7, v8, v9, v10, v11, v12, v13, then v6 (deferred; see "Plan change")
+- **Current version:** v8 (ChatGPT support), not started. I capture real ChatGPT fixtures first; no selectors are written before that.
+- **Completed versions:** v1, v2, v3, v4, v5, v7 (v6 is deferred, not done)
+- **Remaining order:** v8, v9, v10, v11, v12, v13, then v6 (deferred; see "Plan change")
 - **Notes:**
 
   **What was built (v1):** Highlight text in a Claude answer on claude.ai, click the "Explain" button that appears, and get a streamed, markdown-rendered, plain-language explanation in a Shadow DOM popup anchored near the highlight — using the highlight, its paragraph, its message, the user question that produced it, and the last few messages as context. Options page stores the Gemini API key, model id, and a debug toggle. Confirmed working end-to-end on live claude.ai, for both short and longer chats.
@@ -343,3 +344,11 @@ I chose to add features before v6. The versions below (v7–v13) are built **one
   - **Estimates are characters ÷ 4,** which undercounts code and non-Latin text; v6 will use the API's real usage counts.
   - **BM25 part-splitting is an unmeasured trade-off** (243:2 win, 230:0 loss); the tokenizer was not changed.
   - Carried from v4: a one-word highlight like "it" gives BM25 nothing; formulas have still never been observed on a real page.
+
+  **What was done (v7): browser compatibility. No code changes.** The existing Chromium build, loaded unpacked, works in **Vivaldi, Opera and Brave**. No browser-specific code was needed, and none was added. I tested all three myself. Four checks passed in each browser: indexing, offscreen document present, `__glossSearch`, and Explain. **Brave passed with Shields ON**; there is no need to turn them off. The two trouble spots predicted in the plan (Shields blocking the Gemini call, storage partitioning breaking IndexedDB or the offscreen document) did not happen. Because nothing was built, v7 has no plan file and no commit besides this doc update.
+
+  **Two harmless warnings seen in Vivaldi** (both known; ignore them, they are not bugs):
+  1. `options.html` shows modulepreload warnings ("cross-world extension resource mismatch" / "preloaded but not used"). This is build-output noise from WXT/Rolldown; the page works fine.
+  2. The `ort-wasm` Cache API warning ("Failed to cache ort-wasm-simd-threaded.asyncify.wasm: Request scheme 'chrome-extension' is unsupported"), already recorded under v3.
+
+  **Not covered by v7:** only these four browsers on desktop; Edge was not tested (it is Chromium too, so it is expected to work, but that is an assumption, not a result). The stale-content-script trap (see "Development gotchas") applies in every one of these browsers: reload the chat tab after refreshing the extension.
