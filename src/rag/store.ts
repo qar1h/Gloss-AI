@@ -51,7 +51,7 @@ function openDb(): Promise<IDBDatabase> {
         dbPromise = null; // let a later call try again once the other tab is gone
         reject(
           new Error(
-            'IndexedDB upgrade blocked by another open tab — close other claude.ai tabs and reload.',
+            'IndexedDB upgrade blocked by another open tab — close other tabs of this chat site and reload.',
           ),
         );
       };

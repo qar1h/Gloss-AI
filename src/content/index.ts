@@ -7,7 +7,7 @@ import { createExplainButton } from './ui/explainButton';
 import { createPopup } from './ui/popup';
 import { readRawFocal } from './readFocal';
 import { initPromptDebug, printPrepared, recordPrepared } from './promptDebug';
-import { claudeAdapter } from '@/sites/claude';
+import { getAdapter, requireAdapter } from '@/sites';
 import { initIndexer } from '@/rag/indexer';
 import { getSettings } from '@/options/storage';
 import { finalizeFocal } from '@/context/focal';
@@ -21,6 +21,7 @@ import {
 } from '@/messaging/types';
 
 export async function initHighlightExplainer(ctx: ContentScriptContext): Promise<void> {
+  if (!getAdapter()) return; // a page we have no adapter for: do nothing at all
   ctx.onInvalidated(initIndexer());
   initPromptDebug();
 
@@ -58,7 +59,7 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
     try {
       const settings = await getSettings();
       const focal = finalizeFocal(raw, resolveRecentCount(settings.recentMessageCount));
-      const prepared = await prepareExplainPrompt(claudeAdapter.getConversationId(), focal, settings);
+      const prepared = await prepareExplainPrompt(requireAdapter().getConversationId(), focal, settings);
       if (state.closed) return; // popup was closed while retrieval ran — send nothing
 
       recordPrepared(prepared);

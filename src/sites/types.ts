@@ -5,12 +5,19 @@
 import type { Block } from '@/rag/types';
 
 export interface SiteMessage {
+  /**
+   * The message's POSITION in the chat as a decimal integer string ("0", "1", ...) — NOT a site
+   * uuid. Chunk ordering, the before/after labels in the prompt and coverage all do Number(id),
+   * and Number('3af60251-...') is NaN: the prompt would still be well-formed, with the chat in
+   * the wrong order and nothing logged. The indexer refuses ids that fail positionFromId
+   * (src/rag/positionId.ts). A site whose DOM has only uuids must derive a position.
+   */
   id: string;
   role: 'user' | 'assistant';
   element: HTMLElement;
 }
 
-/** A message read from the page: its id is the site's own row index, as a string; its text is getMessageContent-style. */
+/** A message read from the page: its id follows the same position contract as SiteMessage.id; its text is getMessageContent-style. */
 export interface SiteTextMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -69,6 +76,12 @@ export interface SiteAdapter {
 
   /** The current conversation's stable id (from the URL), or null if not on a chat page. */
   getConversationId(): string | null;
+
+  /** The element that contains the whole message list: the right target to watch for new/removed messages. */
+  getTranscriptRoot(): HTMLElement | null;
+
+  /** Attribute names whose change should trigger an index pass (for example a streaming flag). */
+  readonly observedAttributes: string[];
 
   /** Every message currently rendered in the DOM, in chat order. */
   getAllMessages(): SiteMessage[];

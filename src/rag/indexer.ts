@@ -1,4 +1,4 @@
-import { claudeAdapter, getTranscriptFeed } from '@/sites/claude';
+import { requireAdapter } from '@/sites';
 import { getSettings, type Settings } from '@/options/storage';
 import { chunkMessage, CHUNKER_VERSION } from './chunker';
 import { hashText } from './hash';
@@ -72,22 +72,22 @@ function startIndexPass(): void {
 }
 
 async function runIndexPass(): Promise<void> {
-  const conversationId = claudeAdapter.getConversationId();
+  const conversationId = requireAdapter().getConversationId();
   if (!conversationId) return;
 
   const settings = await getSettings();
 
   if (settings.debugEnabled) {
-    const unrecognized = claudeAdapter.getUnrecognizedRowIds();
+    const unrecognized = requireAdapter().getUnrecognizedRowIds();
     if (unrecognized.length > 0) {
       console.log('[highlight-explainer] rows with no recognized role/id (never indexed):', unrecognized);
     }
   }
 
-  for (const message of claudeAdapter.getAllMessages()) {
+  for (const message of requireAdapter().getAllMessages()) {
     const key = `${conversationId}:${message.id}`;
 
-    if (claudeAdapter.isStreaming(message.element)) {
+    if (requireAdapter().isStreaming(message.element)) {
       const firstSeen = streamingSince.get(key);
       if (firstSeen === undefined) {
         streamingSince.set(key, Date.now());
@@ -104,7 +104,7 @@ async function runIndexPass(): Promise<void> {
       streamingSince.delete(key);
     }
 
-    const flatText = claudeAdapter.getMessageText(message.element);
+    const flatText = requireAdapter().getMessageText(message.element);
     const textHash = await hashText(flatText);
     const existing = await getMessageRecord(key);
 
@@ -114,7 +114,7 @@ async function runIndexPass(): Promise<void> {
       existing.chunkerVersion === CHUNKER_VERSION;
     if (unchanged) continue;
 
-    const blocks = claudeAdapter.getMessageBlocks(message.element);
+    const blocks = requireAdapter().getMessageBlocks(message.element);
     const chunks = await chunkMessage(conversationId, message.id, message.role, blocks);
     const record: MessageRecord = {
       key,
@@ -156,7 +156,7 @@ async function runIndexPass(): Promise<void> {
  * deleting real history that just isn't mounted at the moment.
  */
 async function cleanupStaleTail(conversationId: string): Promise<void> {
-  const lastPosition = claudeAdapter.getLastMessagePosition();
+  const lastPosition = requireAdapter().getLastMessagePosition();
   if (lastPosition === null) return;
 
   const records = await getAllMessageRecords(conversationId);
@@ -396,8 +396,8 @@ async function dumpHybrid(conversationId: string, text?: string, k?: number, dep
     }
     const range = selection.getRangeAt(0);
     highlight = selection.toString().trim();
-    paragraph = claudeAdapter.getParagraphAround(range);
-    const message = claudeAdapter.getMessageForNode(range.commonAncestorContainer);
+    paragraph = requireAdapter().getParagraphAround(range);
+    const message = requireAdapter().getMessageForNode(range.commonAncestorContainer);
     ownMessageIds = new Set(message ? [message.id] : []);
   }
 
@@ -426,12 +426,13 @@ export function initIndexer(): () => void {
   const feedObserver = new MutationObserver(() => scheduleIndexPass());
 
   const attachToFeed = () => {
-    const feed = getTranscriptFeed();
+    const adapter = requireAdapter();
+    const feed = adapter.getTranscriptRoot();
     if (feed && feed !== observedFeed) {
       feedObserver.disconnect();
       feedObserver.observe(feed, {
         attributes: true,
-        attributeFilter: ['data-perf-row-streaming', 'data-last-message'],
+        attributeFilter: adapter.observedAttributes,
         childList: true,
         subtree: true,
         characterData: true,
@@ -441,7 +442,7 @@ export function initIndexer(): () => void {
     }
   };
 
-  let lastConversationId = claudeAdapter.getConversationId();
+  let lastConversationId = requireAdapter().getConversationId();
   attachToFeed();
   scheduleIndexPass();
 
@@ -449,7 +450,7 @@ export function initIndexer(): () => void {
   // without a full page reload, and there's no reliable DOM event for that, so
   // a cheap poll is the pragmatic choice here over hooking history/pushState.
   const navigationPoll = setInterval(() => {
-    const id = claudeAdapter.getConversationId();
+    const id = requireAdapter().getConversationId();
     if (id !== lastConversationId) {
       lastConversationId = id;
       scheduleIndexPass();
@@ -458,7 +459,7 @@ export function initIndexer(): () => void {
   }, NAVIGATION_POLL_MS);
 
   (window as unknown as { __glossDumpChunks?: () => Promise<void> }).__glossDumpChunks = async () => {
-    const id = claudeAdapter.getConversationId();
+    const id = requireAdapter().getConversationId();
     if (id) await dumpChunks(id);
   };
 
@@ -466,7 +467,7 @@ export function initIndexer(): () => void {
     text: string,
     k?: number,
   ) => {
-    const id = claudeAdapter.getConversationId();
+    const id = requireAdapter().getConversationId();
     if (!id) return;
     const settings: Settings = await getSettings();
     await dumpSearch(id, text, k ?? settings.retrievalK);
@@ -474,14 +475,14 @@ export function initIndexer(): () => void {
 
   (window as unknown as { __glossHybrid?: (text?: string, k?: number, depth?: number) => Promise<void> }).__glossHybrid =
     async (text?: string, k?: number, depth?: number) => {
-      const id = claudeAdapter.getConversationId();
+      const id = requireAdapter().getConversationId();
       if (!id) return;
       await dumpHybrid(id, text, k, depth);
     };
 
   (window as unknown as { __glossResetFailedEmbeddings?: () => Promise<void> }).__glossResetFailedEmbeddings =
     async () => {
-      const id = claudeAdapter.getConversationId();
+      const id = requireAdapter().getConversationId();
       if (!id) return;
       const count = await resetFailedEmbeddings(id);
       console.log(`[highlight-explainer] cleared ${count} failed embedding(s) — re-indexing now.`);

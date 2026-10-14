@@ -211,6 +211,12 @@ export const claudeAdapter: SiteAdapter = {
     return match?.[1] ?? null;
   },
 
+  getTranscriptRoot(): HTMLElement | null {
+    return document.querySelector<HTMLElement>(FEED_SELECTOR);
+  },
+
+  observedAttributes: ['data-perf-row-streaming', 'data-last-message'],
+
   getAllMessages(): SiteMessage[] {
     return allRows()
       .map((row) => {
@@ -246,8 +252,3 @@ export const claudeAdapter: SiteAdapter = {
       .map((row) => row.dataset.index ?? '(no data-index)');
   },
 };
-
-/** The element that contains the whole message list — the right target to watch for new/removed messages. */
-export function getTranscriptFeed(): HTMLElement | null {
-  return document.querySelector<HTMLElement>(FEED_SELECTOR);
-}
