@@ -53,7 +53,7 @@ eval/             # v6 only: dataset + evaluation scripts
 - All DOM selectors for a chat site live in its adapter in `src/sites/`.
   - Chat sites change their HTML often, so when something breaks there should be exactly one file to fix.
   - Inspect the real page to find selectors. Never guess them.
-- The LLM sits behind the `LLMProvider` interface, so a local model (Ollama or Chrome's built-in Gemini Nano) can be added later without touching other code. Do **not** build those other providers now.
+- The LLM sits behind the `LLMProvider` interface, so a local model (Ollama or Chrome's built-in Gemini Nano) can be added later without touching other code. Do **not** build those other providers now. The only extra provider planned is Ollama in v13; Gemini Nano is ruled out (see "Decisions already made").
 - The adapter must handle two things:
   - messages that are still streaming in (watch the page with a `MutationObserver`),
   - older messages that the site has not loaded onto the page.
@@ -61,11 +61,12 @@ eval/             # v6 only: dataset + evaluation scripts
 - Add a debug toggle on the options page that logs the exact prompt sent and its approximate token count.
 - **The content script owns retrieval and prompt assembly (from v5); the background worker only sends the finished prompt.** The chunk index lives in the chat page's IndexedDB and the query embedding is relayed from the content script, so the background worker cannot do either. The assembly rules are pure modules in `src/context/` with unit tests; `src/context/gather.ts` is the thin I/O layer.
 
-**Target site for v1:** claude.ai. Support for other sites comes later, through new adapters.
+**Target site for v1:** claude.ai. Support for other sites comes later, through new adapters (ChatGPT in v8, Gemini in v11).
 
 ## Build plan: one version at a time
 
 **Workflow rules (important):**
+0. **Build order is not numeric order.** v6 (evaluation) is deferred, not cancelled. The order is v7, v8, v9, v10, v11, v12, v13, and then v6 (see "Plan change" below). "The next version" always means the next one in that order, as named in "Current status".
 1. Build **only the current version**, shown in "Current status" below. Do not start the next version on your own.
 2. Do not add features from later versions early. Only leave clean places in the code for them to plug in.
 3. When a version is done, stop and give the user:
@@ -115,7 +116,8 @@ eval/             # v6 only: dataset + evaluation scripts
 - Make the budget and threshold configurable.
 - **Done when:** long chats produce compact prompts (visible in debug logs) and explanations are still good.
 
-### v6: Evaluation
+### v6: Evaluation — DEFERRED (not cancelled; built after v13, but before applying anywhere)
+Postponed so features can come first (see "Plan change" below). It must still happen **before I apply for jobs**, because "did the RAG help?" needs a real answer, and it is the main AI/ML evidence on the resume. **Untuned guesses awaiting this version:** `retrievalK` = 8, the 6000-token prompt budget, and the 180-word chunk ceiling. None of them has been measured. Also awaiting it: BM25 part-splitting (the 243:2 win against the 230:0 loss) and the budget-crowding finding from v5. By the time v6 runs, the prompt may have been touched by v9 and v10 (a "simpler" instruction, follow-up history) and the adapters by v8 and v11, so check that the eval scripts still reuse the real `src/rag` and `src/context` code.
 - Add a debug button that exports the current chat as JSON.
 - **Dataset:** about 40 real highlights from the user's chats, stored in `eval/dataset.jsonl`. Each entry holds the chat ID, the highlight, its message index, and the chunk IDs the user marked by hand as relevant.
 - **Retrieval metrics:** recall@k and MRR for embedding-only, BM25-only, and hybrid search.
@@ -130,24 +132,72 @@ eval/             # v6 only: dataset + evaluation scripts
 - Run eval scripts in Node (tsx), reusing the same `src/rag` code. Space out API calls to stay within free-tier limits.
 - **Output:** a results table in `eval/RESULTS.md`. Report the honest numbers, even if full context wins on short chats.
 
+## Plan change (decided after v5): features first, evaluation later
+
+I chose to add features before v6. The versions below (v7–v13) are built **one at a time, in order**, with the same workflow rules as v1–v5: build one, stop, I test it live, and only when I explicitly say so move on. They are not a batch. Do not start any of them early. Each version gets its own plan under `docs/superpowers/plans/`.
+
+### v7: Browser compatibility
+- Verify the extension works in **Brave, Opera and Vivaldi**. All three are Chromium-based, so the existing build should load unpacked.
+- **I test all three myself first and report what breaks.** Do not guess at fixes before I report.
+- Likely trouble spots: Brave Shields blocking the Gemini call, and Brave's storage partitioning affecting IndexedDB or the offscreen document.
+- **Done when:** the explain flow works in all three, or the ones that don't are written up as known limitations with the reason.
+
+### v8: ChatGPT support
+- A second `SiteAdapter`. All claude.ai knowledge lives in `src/sites/claude.ts` behind the `SiteAdapter` interface, so this is the test of that design.
+- Expect to answer the same questions v1 and v2 answered for Claude: how to find messages, how to tell user from assistant, how to locate code blocks, how to detect streaming, whether the site virtualizes, and whether message ids are stable or positional.
+- **I capture real fixtures before any selectors are written, same rule as v1. Never guess selectors.**
+- **Deliberately before the popup features.** Every popup feature built against claude.ai alone risks baking in Claude-specific assumptions; a second site surfaces those early. Anything Claude-specific that leaks out of `src/sites/` is a bug to fix here (v5's `data-index` contiguity check is one such place: check it still holds for a site with different or no virtualization).
+- **Done when:** highlighting on chatgpt.com gives a correct explanation, with chunking, indexing and retrieval working on its chats, and claude.ai still works.
+
+### v9: "Simpler" button in the popup
+- One click regenerates the explanation at a simpler level.
+- It **rebuilds from the original prompt with a different instruction**, not by paraphrasing the explanation already shown, so the retrieved context is kept (and retrieval does not need to re-run).
+- Pressing it repeatedly keeps getting simpler, so it tracks a **level**, not a flag.
+
+### v10: Follow-up questions in the popup
+- A text box so I can ask a question about the explanation without leaving the popup. This is the core problem the whole project exists to solve, so it matters.
+- **Open questions to settle in its plan:**
+  - popup sizing and scrolling for a thread,
+  - how much history each follow-up carries, and the budget cap for it,
+  - whether retrieval re-runs per question,
+  - whether the thread survives closing the popup.
+- **Stretch goal for later (not part of v10 unless I say so):** highlighting text inside the popup's own answer to go a level deeper.
+
+### v11: Gemini support
+- A third `SiteAdapter` (gemini.google.com), same approach as v8, including captured fixtures first. It comes after ChatGPT so the general lessons from the second site are already learned.
+- Careful with naming: "Gemini" is both a chat site and our LLM. The adapter is the site; `src/llm/gemini.ts` is the API.
+
+### v12: Popup UI improvements
+- After v9 and v10, because those change what the popup has to hold. Scope is set in its plan.
+
+### v13: Local model option (Ollama)
+- A second `LLMProvider` I can select on the options page, alongside Gemini. Needs: provider choice, Ollama URL, model name, a test-connection button, and clear errors for **Ollama not running**, **`OLLAMA_ORIGINS` not allowed**, and **model not pulled**.
+- `OLLAMA_ORIGINS` is where users will get stuck: the error message must say exactly what to set and how.
+- Consider a per-provider token budget, since local models read less at once.
+- **Last on purpose:** it is the feature least likely to improve the tool for me. I'm happy with Gemini, and a local model would be slower and weaker. It's for other users and for proving the provider abstraction.
+
+## Decisions already made (do not revisit unless I raise them)
+
+- **Gemini Nano is NOT being built.** Decided against for now. (The Ollama provider in v13 is the only extra provider planned.)
+- **Routing requests through my claude.ai session is NOT being built.** It is fragile, against the terms of service, and worse on a resume.
+- **The API key stays.** The Gemini free tier costs nothing, so a key is friction, not cost. Do not propose removing it or adding a backend to hide it.
+- **Multi-site support is a goal.** It is what makes the `SiteAdapter` abstraction worth having, and it is the strongest item on the resume. But **each site is its own version, not a batch.**
+- **v6 is deferred, not cancelled.** It must happen before I apply anywhere. The k=8, 6000-token budget and 180-word chunk ceiling stay untuned guesses until then; do not "tune" them by feel in the meantime.
+
 ## Later ideas (not scheduled; do not build unless asked)
 
-- Follow-up questions inside the popup.
-- Highlighting text inside the popup's own answer, for a nested explanation.
-- A "simpler / more detailed" toggle.
+- Highlighting text inside the popup's own answer, for a nested explanation (the stretch goal under v10).
 - A personal glossary of every term the user has looked up.
-- Adapters for ChatGPT and Gemini.
-- A local-model provider (Ollama or Chrome's built-in Gemini Nano).
 
 ## Known limitations (be upfront about these)
 
 - The extension only sees text that is on the page. It cannot see the chat site's hidden instructions, its memory, the full contents of uploaded files, or older messages that haven't been loaded.
 - claude.ai virtualizes long chats (it un-mounts rows that scroll far out of view), so the chunk index only covers messages that have actually been in the DOM at some point — a very long chat you haven't scrolled through yet won't be fully indexed until you do. **The gaps are not just "the old messages".** Observed live on the long Supabase chat (v5 test): the mounted rows were `29–36`, `217`, and `403–405`, three disconnected islands, including a lone message `217` far from anything on screen. So the index can have arbitrary holes in the middle of a chat, not only a missing beginning, and a hole can sit right next to a highlight.
 - Gemini is a different model from the one that wrote the answer, so it interprets the text rather than "remembering" what was meant.
-- Site HTML changes can break the adapter.
+- Site HTML changes can break the adapter. **Supporting three sites (v8, v11) triples that maintenance:** when any one of them redesigns, only that site's adapter should need fixing, but each of the three can break independently and at any time. **Each site needs its own captured fixtures** in `fixtures/` (real HTML, never hand-written for selector work), and the adapter's selectors are checked against them.
 - Free-tier limits can change, and Google may use free-tier inputs to improve its models.
 - **Retrieval widens what leaves my machine.** Before v5, only the nearby messages went to Gemini. Now any chunk of the chat can be sent, including credentials, API keys or tokens I pasted into a chat much earlier. No redaction is built; this is a known, accepted risk. `__glossPrompt()` shows exactly what a click would send before I click.
-- Desktop Chrome only.
+- Desktop Chromium browsers only (Chrome; Brave, Opera and Vivaldi are being verified in v7). No Firefox or Safari.
 
 ## Communication with the user
 
@@ -162,8 +212,9 @@ eval/             # v6 only: dataset + evaluation scripts
 
 ## Current status
 
-- **Current version:** v6, not started
+- **Current version:** v7 (browser compatibility), not started. I test Brave, Opera and Vivaldi myself first and report what breaks; do not start before that.
 - **Completed versions:** v1, v2, v3, v4, v5
+- **Remaining order:** v7, v8, v9, v10, v11, v12, v13, then v6 (deferred; see "Plan change")
 - **Notes:**
 
   **What was built (v1):** Highlight text in a Claude answer on claude.ai, click the "Explain" button that appears, and get a streamed, markdown-rendered, plain-language explanation in a Shadow DOM popup anchored near the highlight — using the highlight, its paragraph, its message, the user question that produced it, and the last few messages as context. Options page stores the Gemini API key, model id, and a debug toggle. Confirmed working end-to-end on live claude.ai, for both short and longer chats.
