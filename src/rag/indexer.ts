@@ -2,6 +2,7 @@ import { requireAdapter } from '@/sites';
 import { getSettings, type Settings } from '@/options/storage';
 import { chunkMessage, CHUNKER_VERSION } from './chunker';
 import { hashText } from './hash';
+import { positionFromId } from './positionId';
 import { embedTexts, EMBEDDING_VERSION } from './embedder';
 import { buildEmbedInputForChunk, buildSearchQueryText } from './query';
 import { searchChunks } from './search';
@@ -84,7 +85,18 @@ async function runIndexPass(): Promise<void> {
     }
   }
 
+  const warnedBadIds = new Set<string>();
   for (const message of requireAdapter().getAllMessages()) {
+    // The id must be a position (see positionId.ts). A uuid here would write NaN positions and
+    // scramble chat order without any error, so refuse it, loudly, once per pass.
+    const position = positionFromId(message.id);
+    if (position === null) {
+      if (!warnedBadIds.has(message.id)) {
+        warnedBadIds.add(message.id);
+        console.warn(`[highlight-explainer] not indexing a message whose id is not a position: ${JSON.stringify(message.id)}`);
+      }
+      continue;
+    }
     const key = `${conversationId}:${message.id}`;
 
     if (requireAdapter().isStreaming(message.element)) {
@@ -120,7 +132,7 @@ async function runIndexPass(): Promise<void> {
       key,
       conversationId,
       messageId: message.id,
-      position: Number(message.id),
+      position,
       role: message.role,
       textHash,
       chunkerVersion: CHUNKER_VERSION,
