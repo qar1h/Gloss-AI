@@ -181,6 +181,24 @@ Run it (a) at the bottom of the chat, (b) after scrolling to the middle, (c) at 
 
 **Gate:** Branch A (absolute keys) → continue with Tasks 3–5 as written. Branch B (relative keys) → stop, re-plan with you; do not improvise a position scheme.
 
+### Phase 0, round 1 result (2026-10-16): gate NOT passed, Tasks 3–5 stay blocked
+
+What the five tables show:
+
+- **Verified:** streaming state is `in_progress` (else `complete`). A turn can have only a user unit (`fallback-turn-9`, complete). The assistant unit ordinal is 1 or 2, so the key's ordinal is not always 1. No empty placeholder wrappers were seen (`hasContent` always true). The mounted window is small (3–5 turns) and the chat is ~24 turns tall (box 163398px; one turn alone was 41464px). The DOM conversation id matched the URL path in every run.
+- **Fits "absolute":** the runs with only `fallback-turn-N` keys read 0–2 (top), 9–13 (middle), 22–23 (end).
+- **New complication:** some turns carry a UUID instead of `fallback-turn-N` in `data-content-search-turn-key`. So that attribute gives a position for only some turns.
+- **Unexplained contradiction (the reason the gate is closed):** the same three UUID turns (78f672c1, 59f288c1, 21e099e3) sit *directly after* `fallback-turn-0, fallback-turn-1` in the first table, but directly *before* `fallback-turn-22` in the streaming and search tables. If numbers were absolute and DOM neighbours were chat neighbours, those turns would be 2–4 in one run and 19–21 in the other. At least one premise is false: (a) mounted turns can be non-adjacent in the chat while adjacent in the DOM, (b) `fallback-turn-N` is not an absolute index, or (c) the chat changed between runs.
+- **Why it matters:** the only way to position a UUID turn is "nearest `fallback-turn-N` in the same window, plus DOM order". That is only correct if the window is contiguous. If (a) is true it would silently produce wrong positions with a well-formed prompt, the failure mode in CLAUDE.md. Not built on a guess.
+
+Candidate position schemes, in order of preference, once round 2 settles the contradiction:
+
+- **P1, anchor + DOM order:** position of a UUID turn = nearest `fallback-turn-N` anchor in the window, offset by DOM distance. Needs a contiguous window and an anchor in every window. A window with no anchor is reported and not indexed.
+- **P2, P1 plus a remembered map:** store `data-turn-key` → position in IndexedDB once learned, so an all-UUID window can still be positioned. Needs a new object store (schema bump). Only if round 2 shows all-UUID windows are common.
+- **P3, stop and re-plan:** if round 2 shows (a) or (b).
+
+Round 2 is a recorder that logs only ids, never text; see the chat message that accompanied this commit.
+
 ---
 
 ## Task 1: Adapter registry and Claude-leak fixes (no behaviour change)
