@@ -199,6 +199,15 @@ Candidate position schemes, in order of preference, once round 2 settles the con
 
 Round 2 is a recorder that logs only ids, never text; see the chat message that accompanied this commit.
 
+### Phase 0, round 2 result (2026-10-16): `fallback-turn-N` is NOT a chat position (option (b)); the window IS contiguous
+
+Recorder output: 7 turns seen, 1 chain, 0 adjacency conflicts, 2 label conflicts. The same turn (by `data-turn-key`, stable) was labelled `fallback-turn-0` at one moment and `fallback-turn-5` at another, so the label follows render order within the moving window. This also explains round 1's contradiction: the labels, not the turns, moved. Heights of the same turn also differ between runs, so pixel offsets are not a stable key either.
+
+- **Superseded:** Task 3 (`chatgptKeys`, "position from `fallback-turn-N`") and the position part of Task 5. Do not execute them.
+- **Still valid:** Task 4 (block extraction) does not depend on ids. Task 1 and Task 2 are done and unaffected.
+- **Facts now usable:** `data-turn-key` identifies a turn within a session; DOM adjacency inside the window is chat adjacency (one sweep over 7 turns, not yet the whole chat); there is no absolute index, no total, and no last-message marker in the DOM.
+- **Next:** re-plan the position/identity scheme with the user (options and recommendation in the chat message of this date). No ChatGPT adapter code until that is decided.
+
 ---
 
 ## Task 1: Adapter registry and Claude-leak fixes (no behaviour change)
