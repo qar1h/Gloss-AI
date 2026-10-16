@@ -208,6 +208,19 @@ Recorder output: 7 turns seen, 1 chain, 0 adjacency conflicts, 2 label conflicts
 - **Facts now usable:** `data-turn-key` identifies a turn within a session; DOM adjacency inside the window is chat adjacency (one sweep over 7 turns, not yet the whole chat); there is no absolute index, no total, and no last-message marker in the DOM.
 - **Next:** re-plan the position/identity scheme with the user (options and recommendation in the chat message of this date). No ChatGPT adapter code until that is decided.
 
+### Decisions (2026-10-16): scheme B, session-scoped sequence
+
+- **B, not C.** Keep integer positions; the ChatGPT adapter assigns them from a session-stable ordered sequence of `data-turn-key` UUIDs, built from DOM adjacency inside the contiguous window. Chunk id format, schema, chunker, `CHUNKER_VERSION`, prompt assembly: unchanged. The index lives for one page load (cleared on first entering a chat in a page session, with the existing `getAllMessageRecords` + `deleteMessage`). **Built so C (a persisted UUID→position map and successor links) can be added later without changing the sequence module's interface.** C is not wanted yet; the user will judge from use whether losing the index on reload matters.
+- **Arbitrary message numbers are fine** (`message_number` is a label; before/after relations stay correct). Base a few thousand, two slots per turn (user, assistant).
+- **No geometry.** No "is this the start of the chat" check from layout offsets; "not loaded" when we can't tell is the safe direction (same call as v5).
+- **A detected ordering conflict must be VISIBLE in the popup, not only the debug report, the same way v5 surfaces a missing question.** A conflict is the recurring failure mode (mis-ordered prompt, no error). Design requirements:
+  1. The sequence module records conflicts (a turn seen followed or preceded by two different turns) and exposes them; it never silently overwrites an edge.
+  2. On a conflict the adapter fails safe, not just loud: it drops the sequence and the session index for that chat and restarts from the current window, returns no recent messages that cross the conflict, and excerpts from before the conflict cannot be retrieved.
+  3. The popup's muted line says so in plain words (for example "chat order changed unexpectedly, so only the nearby messages were used") for as long as the session has an unresolved conflict. This needs one string carried through `RawFocal` → `PromptReport` → `describeCoveragePopup`, a deliberate, small exception to "no changes to prompt assembly"; the prompt text itself is not changed. `__glossPrompt()` prints the same note.
+  4. Tests: the conflict is detected, the chain is dropped, and the popup/report line is produced.
+- **Unattached windows** (a scrollbar drag lands on turns that connect to nothing known) are held in memory and not indexed until they connect; the debug report names them.
+- **Probes before building:** a full top-to-bottom sweep (expect 1 chain, 0 jumps, 0 conflicts) and a fast scrollbar drag (expect several chains, jumps > 0, 0 conflicts). Recorder: `__probe3`.
+
 ---
 
 ## Task 1: Adapter registry and Claude-leak fixes (no behaviour change)
