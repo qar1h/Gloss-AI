@@ -3,6 +3,7 @@
 // outside src/sites/ should know what a site's HTML looks like.
 
 import type { Block } from '@/rag/types';
+import type { OrderStatus } from '../context/types';
 
 export interface SiteMessage {
   /**
@@ -94,6 +95,20 @@ export interface SiteAdapter {
 
   /** A message's content broken into ordered, typed blocks (paragraphs, headings, code, ...). */
   getMessageBlocks(el: HTMLElement): Block[];
+
+  /**
+   * Only for sites whose message positions are valid for part of a page's life (ChatGPT). A string
+   * naming the numbering the current ids belong to; it changes whenever stored positions stop
+   * being valid. The stored index is wiped when it differs from the one it was written under
+   * (src/rag/generationGate.ts). Omit it (Claude) and the index is kept across reloads.
+   */
+  getIndexGeneration?(): string | null;
+
+  /**
+   * Only for sites whose message order is partly unknown. Says whether the index may be searched
+   * for this message, and what the popup should tell the user. Omit it and the order is trusted.
+   */
+  getOrderStatus?(messageId: string): OrderStatus;
 
   /** Debug only: ids (or a placeholder) of DOM rows getAllMessages() couldn't recognize
    * (missing role or id) — lets the indexer log what it's silently not indexing. */

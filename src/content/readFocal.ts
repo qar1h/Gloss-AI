@@ -26,9 +26,11 @@ export function rawFocalForMessage(message: SiteMessage, highlight: string, para
     return null;
   }
 
+  const orderStatus = requireAdapter().getOrderStatus?.(message.id);
   return {
     highlight,
     paragraph,
+    ...(orderStatus ? { orderStatus } : {}),
     source: { id: message.id, role: message.role, text: requireAdapter().getMessageContent(message.element) },
     question: lookup?.message ?? null,
     questionStatus: lookup ? lookup.status : 'not-applicable',

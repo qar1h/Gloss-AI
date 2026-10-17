@@ -237,6 +237,7 @@ export function assemblePrompt(input: AssemblyInput, opts: AssemblyOptions): Ass
       `the question that produced this message isn't loaded: the page has a gap right before message ${focal.source.id}, so no question was sent (the nearest mounted user message is not it)`,
     );
   }
+  if (focal.orderStatus.note) warnings.push(`message order: ${focal.orderStatus.note}`);
   if (focal.recentShortfall) {
     warnings.push(
       `recent messages: wanted ${focal.recentShortfall.wanted}, found ${focal.recentShortfall.found} — the page has a gap before message ${focal.source.id}, so fewer were sent`,
@@ -263,6 +264,7 @@ export function assemblePrompt(input: AssemblyInput, opts: AssemblyOptions): Ass
     demotedRecent: focal.demotedRecent,
     questionState,
     recentShortfall: focal.recentShortfall,
+    orderNote: focal.orderStatus.note,
   };
 
   return { prompt, report };

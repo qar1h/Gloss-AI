@@ -76,6 +76,9 @@ export function describeCoveragePopup(report: PromptReport, coverage: Coverage):
     parts.push(`${coverage.indexedMessages} messages indexed`);
   }
 
+  // A site's caveat about message order goes first: it is the one thing the user must not miss.
+  if (report.orderNote) parts.unshift(report.orderNote);
+
   const text = parts.join(' · ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

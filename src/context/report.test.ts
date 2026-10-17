@@ -36,6 +36,7 @@ function makeReport(overrides: Partial<PromptReport> = {}): PromptReport {
     demotedRecent: [],
     questionState: 'found',
     recentShortfall: null,
+    orderNote: null,
     ...overrides,
   };
 }
@@ -138,6 +139,26 @@ describe('describeCoveragePopup', () => {
     const report = makeReport({ mode: 'full', excerptCount: 0, excludedMessageIds: ['1', '0'] });
     expect(describeCoveragePopup(report, { indexedMessages: 0, totalMessages: 2 })).toBe(
       'Whole indexed chat included · 0 of ~2 messages indexed',
+    );
+  });
+
+  it('puts a site order note first, so it cannot be missed', () => {
+    const text = describeCoveragePopup(
+      makeReport({ orderNote: 'chat order changed unexpectedly earlier on this page, so the index was rebuilt' }),
+      { indexedMessages: 6, totalMessages: null },
+    );
+    expect(text).toBe(
+      'Chat order changed unexpectedly earlier on this page, so the index was rebuilt · 3 excerpts from elsewhere in the chat · 6 messages indexed',
+    );
+  });
+
+  it('keeps the order note alongside a retrieval-unavailable message', () => {
+    const text = describeCoveragePopup(
+      makeReport({ excerptCount: 0, retrievalNote: 'jumped here', orderNote: "this part of the chat isn't connected to the indexed part" }),
+      { indexedMessages: 6, totalMessages: null },
+    );
+    expect(text).toBe(
+      "This part of the chat isn't connected to the indexed part · retrieval unavailable, nearby messages only · 6 messages indexed",
     );
   });
 

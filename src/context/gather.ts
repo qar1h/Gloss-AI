@@ -9,6 +9,7 @@ import { excludeMessages, hybridSearch } from '@/rag/hybrid';
 import { buildSearchQueryText } from '@/rag/query';
 import { getAllChunks } from '@/rag/store';
 import { getCoverage } from '@/rag/coverage';
+import { ensureIndexGeneration } from '@/rag/generation';
 import type { Chunk } from '@/rag/types';
 import type { Settings } from '@/options/storage';
 import { assemblePrompt, chooseMode } from './assemble';
@@ -66,10 +67,19 @@ export async function prepareExplainPrompt(
     ...focal.recent.map((m) => m.id),
   ]);
 
+  // A site can say the ids on this page are not comparable with the indexed ones (a window that is
+  // not connected to what was indexed). Then the index is not read at all: ranking it against ids
+  // from another numbering would give a well-formed prompt with chunks in the wrong place.
+  const retrievalDisabled = focal.orderStatus.retrieval === 'disabled';
+
   let retrievalNote: string | undefined;
   let allChunks: Chunk[] = [];
-  if (conversationId) {
+  if (retrievalDisabled) {
+    retrievalNote = focal.orderStatus.note ?? 'message order is not trusted here, so the chat index was not searched';
+  } else if (conversationId) {
     try {
+      // Rows written under another numbering are wiped first (see rag/generationGate.ts).
+      await ensureIndexGeneration(conversationId, focal.orderStatus.indexGeneration);
       allChunks = await getAllChunks(conversationId);
     } catch (error) {
       retrievalNote = `could not read the chat index (${describeError(error)})`;
@@ -83,7 +93,7 @@ export async function prepareExplainPrompt(
   const decision = chooseMode(focal, others, opts, override.mode);
 
   let ranked: Candidate[] | null = null;
-  if (decision.mode === 'retrieval' && conversationId) {
+  if (decision.mode === 'retrieval' && conversationId && !retrievalDisabled) {
     try {
       let queryVector: number[] | null = null;
       try {

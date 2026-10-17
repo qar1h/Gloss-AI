@@ -3,6 +3,7 @@ import { getSettings, type Settings } from '@/options/storage';
 import { chunkMessage, CHUNKER_VERSION } from './chunker';
 import { hashText } from './hash';
 import { positionFromId } from './positionId';
+import { ensureIndexGeneration, onIndexWiped } from './generation';
 import { embedTexts, EMBEDDING_VERSION } from './embedder';
 import { buildEmbedInputForChunk, buildSearchQueryText } from './query';
 import { searchChunks } from './search';
@@ -85,8 +86,23 @@ async function runIndexPass(): Promise<void> {
     }
   }
 
+  // Read the page first (this can renumber a site whose positions are session-scoped), then ask
+  // which numbering that is, in the same tick, so the two always agree. Rows written under another
+  // numbering are wiped before we write under this one (see generationGate.ts).
+  const adapter = requireAdapter();
+  const messages = adapter.getAllMessages();
+  const generation = adapter.getIndexGeneration?.() ?? null;
+  await ensureIndexGeneration(conversationId, generation);
+  const renumbered = () => (adapter.getIndexGeneration?.() ?? null) !== generation;
+
   const warnedBadIds = new Set<string>();
-  for (const message of requireAdapter().getAllMessages()) {
+  for (const message of messages) {
+    // The numbering changed while this pass was running: what we hold is numbered under the old
+    // one, and writing it now would mix two numberings. Drop the pass; a fresh one is queued.
+    if (renumbered()) {
+      scheduleIndexPass();
+      return;
+    }
     // The id must be a position (see positionId.ts). A uuid here would write NaN positions and
     // scramble chat order without any error, so refuse it, loudly, once per pass.
     const position = positionFromId(message.id);
@@ -140,6 +156,10 @@ async function runIndexPass(): Promise<void> {
       lastIndexedAt: Date.now(),
     };
     const previousChunkIds = existing?.chunkIds ?? [];
+    if (renumbered()) {
+      scheduleIndexPass();
+      return;
+    }
     await replaceMessage(record, chunks, previousChunkIds);
     // replaceMessage drops the embedding rows of chunk ids this message no longer has —
     // drop them from the status cache too, so it stays a true picture of the store.
@@ -198,6 +218,14 @@ type EmbeddingStatus = Pick<
 // fresh read rather than starting out silently stale.
 let statusCacheConversationId: string | null = null;
 let statusCache = new Map<string, EmbeddingStatus>();
+
+// A wipe (generationGate) deletes the embedding rows this cache describes.
+onIndexWiped((conversationId) => {
+  if (statusCacheConversationId === conversationId) {
+    statusCache = new Map();
+    statusCacheConversationId = null;
+  }
+});
 
 function toEmbeddingStatus(record: EmbeddingRecord): EmbeddingStatus {
   return {
