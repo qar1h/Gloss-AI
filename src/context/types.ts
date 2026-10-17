@@ -5,7 +5,7 @@ import type { Chunk } from '../rag/types';
 export type Role = 'user' | 'assistant';
 
 export interface PromptMessage {
-  /** The site's own row index (claude.ai `data-index`), as a string. */
+  /** The message's position as a decimal integer string (Claude's `data-index`, or a ChatGPT frame position; see SiteMessage.id). */
   id: string;
   role: Role;
   text: string;

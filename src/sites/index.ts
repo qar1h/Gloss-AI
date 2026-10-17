@@ -1,6 +1,7 @@
 // Picks the SiteAdapter for the page we are on. Everything outside src/sites/ goes through
 // this, so adding a site means adding an adapter and one line in registry.ts.
 
+import { chatgptAdapter } from './chatgpt';
 import { claudeAdapter } from './claude';
 import { siteForHostname } from './registry';
 import type { SiteAdapter } from './types';
@@ -9,7 +10,8 @@ import type { SiteAdapter } from './types';
 export function getAdapter(): SiteAdapter | null {
   const site = siteForHostname(location.hostname);
   if (site === 'claude') return claudeAdapter;
-  return null; // 'chatgpt' is wired in once its adapter exists
+  if (site === 'chatgpt') return chatgptAdapter;
+  return null;
 }
 
 /** For code that only runs after the content script has decided the site is supported. */

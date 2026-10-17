@@ -102,6 +102,14 @@ export async function getAllMessageRecords(conversationId: string): Promise<Mess
   return promisifyRequest(tx.objectStore(MESSAGES_STORE).index('by_conversation').getAll(conversationId));
 }
 
+/** Message records of every conversation whose id starts with `prefix` (see namespace.ts). */
+export async function getMessageRecordsByPrefix(prefix: string): Promise<MessageRecord[]> {
+  const db = await openDb();
+  const tx = db.transaction(MESSAGES_STORE, 'readonly');
+  const range = IDBKeyRange.bound(prefix, prefix + '￿');
+  return promisifyRequest(tx.objectStore(MESSAGES_STORE).index('by_conversation').getAll(range));
+}
+
 export async function getAllChunks(conversationId: string): Promise<Chunk[]> {
   const db = await openDb();
   const tx = db.transaction(CHUNKS_STORE, 'readonly');
