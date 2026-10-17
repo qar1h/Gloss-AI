@@ -350,7 +350,7 @@ export function positionFromId(id: string): number | null {
 
 ---
 
-## Task 3 (gated on Phase 0, Branch A): ChatGPT identity helpers
+## Task 3 — SUPERSEDED by scheme B (see "Scheme B tasks" at the end): ChatGPT identity helpers
 
 **Files:** Create `src/sites/chatgptKeys.ts`, `src/sites/chatgptKeys.test.ts`.
 
@@ -376,7 +376,7 @@ Expected from the fixtures (assert exact numbers once the code runs, then freeze
 
 Steps: write the failing tests (fixture loaded with `readFileSync` + linkedom) → implement → pass → commit `feat(sites): extract blocks from ChatGPT messages`.
 
-## Task 5 (gated on Branch A): the ChatGPT adapter, manifest, build
+## Task 5 — SUPERSEDED by scheme B (see "Scheme B tasks" at the end): the ChatGPT adapter, manifest, build
 
 **Files:** Create `src/sites/chatgpt.ts`; Modify `src/sites/index.ts`, `src/entrypoints/content.ts`.
 
@@ -410,3 +410,40 @@ On chatgpt.com, on a short chat then your long one:
 8. **claude.ai regression:** reload a claude.ai tab; Explain, `__glossSearch`, `__glossHybrid`, `__glossPrompt` behave as in v5.
 
 Then update CLAUDE.md "Current status" only after you say v8 is done.
+
+---
+
+## Scheme B tasks (2026-10-17) — these replace Tasks 3 and 5; Task 4 (block extraction) stands
+
+Probe round 3 (full sweep + fast drag, with a recorder that sampled 1047 and 101 times) passed: over a real 27-turn chat, **1 chain, 0 jumps, 0 conflicts** on a slow sweep (window 5–7 turns, 109k–169k px unmounted), and **2 chains, 5 jumps, 0 conflicts** on a fast drag, the two chains correctly kept apart. Turn shapes: `0:user 1:assistant` (14), `0:user 2:assistant` (10), `0:user` alone (3). Only `complete` seen in the sweep; `in_progress` confirmed earlier.
+
+### Design (what is built)
+
+- **Identity** = `data-turn-key` (UUID). **Position** = a number the adapter assigns. User message id = `slot*2`, assistant = `slot*2 + 1`, where `slot` is the turn's place in a session-stable frame that starts at `BASE_SLOT = 5000`. Chunk ids, `MessageRecord`, schema, `CHUNKER_VERSION`, chunker: unchanged. A user-only turn simply has no odd position.
+- **`TurnSequence` (pure, `src/sites/turnSequence.ts`)** needs no edge list. It holds `slotOf` and `turnAt`. `observe(window)` takes the mounted turn ids in DOM order:
+  1. empty frame → the window becomes the base;
+  2. no turn of the window known → the window is **detached**: it gets window-local slots from `LOCAL_BASE = 100000`, nothing is stored, nothing is indexed;
+  3. otherwise take the first known turn as an anchor; every turn gets `anchorSlot + (index − anchorIndex)`. A known turn at a different slot, or a slot already held by a different turn, is a **conflict**. This also catches an edited message (the new turn wants the slot the old one holds);
+  4. a conflict **resets** the frame (generation + 1, conflict count + 1) and the current window becomes the new base. The window just read is the freshest truth, so the new frame is consistent.
+- **Generation gate** (`src/rag/generationGate.ts`, pure orchestrator): an adapter may return `getIndexGeneration()`; when it differs from the last one applied for that chat, the chat's stored index is wiped (existing `getAllMessageRecords` + `deleteMessage`) **before** anyone reads or writes it. On a fresh page load nothing has been applied, so the first visit wipes: the index is session-scoped. The indexer and `prepareExplainPrompt` both call it, and the indexer aborts a pass if the generation changes mid-pass, so a reset can never leave old-numbered rows mixed with new-numbered ones. Persisting `slotOf` (option C) later only needs to feed this gate a stable generation.
+- **Streaming:** the window handed to the sequence is cut at the first turn whose state is `in_progress` (and everything after it), so a turn whose key might change when it finishes is never placed. Only `in_progress` counts as streaming.
+- **Navigation:** the adapter skips a sample when the URL's `/c/<id>` and the DOM's `data-chatgpt-selection-conversation-id` disagree (mid-navigation). Sequences are kept per conversation.
+- **Visibility (as decided):** `getOrderStatus(messageId)` on the adapter returns `{ retrieval, note }`. A detached source window gives `retrieval: 'disabled'` (the index is not searched; the always-include material is still sent) and a note; a conflict earlier in the session gives a note on every later explanation in that chat. The note travels `RawFocal.orderStatus` → `FocalInput.orderStatus` → `PromptReport.orderNote` → the popup's muted line and the console report. The prompt text is unchanged. This is the one deliberate edit to `src/context/` (types, focal, assemble, report, gather) and is optional-field only, so claude.ai output is byte-identical.
+- **Stated limits:** pending (detached) windows are not cached, so when they later connect only currently mounted turns are indexed; the first turn of the window always reports "nearby messages not loaded" because the chat start is not knowable (no geometry); the index is lost on reload (option C is the future fix); a user highlighting inside a streaming turn gets nothing until it finishes.
+
+### Tasks, in order, each committed with its tests
+
+1. `turnSequence.ts` + tests (base, slide down/up, detached, conflict by slot clash, conflict by position mismatch, edit replaces a turn, duplicate ids, bounds, generation/conflict counters).
+2. `generationGate.ts` + tests; wire `getIndexGeneration?()` into `SiteAdapter`, the indexer (gate + mid-pass abort) and `prepareExplainPrompt`.
+3. Order status through the prompt layer (`context/types`, `focal`, `assemble`, `report`, `gather`, `readFocal`) + tests.
+4. `chatgptBlocks.ts` + tests against the four ChatGPT fixtures (Task 4 as written above).
+5. `chatgpt.ts` adapter + tests against the conversation fixture and synthetic sliding windows; registry, manifest `matches`.
+6. Build, full suite, docs, live checklist (below). Self-review of the whole branch.
+
+### Live checklist additions for B
+
+- Send a new message and let it finish: no conflict note, no index wipe in the debug log (the key of the streaming turn must not change).
+- Switch chats from the sidebar without reloading, then Explain: ids and index belong to the chat you are in.
+- Edit an early message: the next explanation shows the "chat order changed" note and the index restarts from the screen.
+- Fast scrollbar drag, then highlight: the explanation still works, the popup says the part is not connected and only nearby messages were used.
+- Read a real `__glossPrompt()` report on ChatGPT: the message numbers are arbitrary but the question is the same turn's user message and the recent ones are the turns just above.
