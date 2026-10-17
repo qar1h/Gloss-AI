@@ -123,7 +123,7 @@ function readSnapshot(): Snapshot | null {
   const observation = sequence.observe(mounted.map((t) => t.dataset.turnKey ?? ''));
   if (observation.reset) {
     console.warn(
-      `[highlight-explainer] the order of this ChatGPT chat changed unexpectedly (${observation.conflict}). The index of this chat was rebuilt from the messages on screen.`,
+      `[highlight-explainer] the order of this ChatGPT chat changed (${observation.conflict}). The index of this chat was rebuilt from the messages on screen.`,
     );
   }
 
@@ -309,7 +309,7 @@ export const chatgptAdapter: SiteAdapter = {
     }
     const notes: string[] = [];
     if (snapshot.sequence.conflictCount > 0) {
-      notes.push("the chat's order changed unexpectedly earlier on this page, so the index was rebuilt from what is on screen");
+      notes.push("this chat changed earlier on this page (for example an edit, or the page reordered it), so the index was rebuilt from what is on screen");
     }
     const detached = isLocalPosition(Number(messageId));
     if (detached) {

@@ -216,7 +216,7 @@ Recorder output: 7 turns seen, 1 chain, 0 adjacency conflicts, 2 label conflicts
 - **A detected ordering conflict must be VISIBLE in the popup, not only the debug report, the same way v5 surfaces a missing question.** A conflict is the recurring failure mode (mis-ordered prompt, no error). Design requirements:
   1. The sequence module records conflicts (a turn seen followed or preceded by two different turns) and exposes them; it never silently overwrites an edge.
   2. On a conflict the adapter fails safe, not just loud: it drops the sequence and the session index for that chat and restarts from the current window, returns no recent messages that cross the conflict, and excerpts from before the conflict cannot be retrieved.
-  3. The popup's muted line says so in plain words (for example "chat order changed unexpectedly, so only the nearby messages were used") for as long as the session has an unresolved conflict. This needs one string carried through `RawFocal` → `PromptReport` → `describeCoveragePopup`, a deliberate, small exception to "no changes to prompt assembly"; the prompt text itself is not changed. `__glossPrompt()` prints the same note.
+  3. The popup's muted line says so in plain words (for example "this chat changed earlier on this page, so the index was rebuilt from what is on screen") for as long as the session has an unresolved conflict. This needs one string carried through `RawFocal` → `PromptReport` → `describeCoveragePopup`, a deliberate, small exception to "no changes to prompt assembly"; the prompt text itself is not changed. `__glossPrompt()` prints the same note.
   4. Tests: the conflict is detected, the chain is dropped, and the popup/report line is produced.
 - **Unattached windows** (a scrollbar drag lands on turns that connect to nothing known) are held in memory and not indexed until they connect; the debug report names them.
 - **Probes before building:** a full top-to-bottom sweep (expect 1 chain, 0 jumps, 0 conflicts) and a fast scrollbar drag (expect several chains, jumps > 0, 0 conflicts). Recorder: `__probe3`.
@@ -447,3 +447,21 @@ Probe round 3 (full sweep + fast drag, with a recorder that sampled 1047 and 101
 - Edit an early message: the next explanation shows the "chat order changed" note and the index restarts from the screen.
 - Fast scrollbar drag, then highlight: the explanation still works, the popup says the part is not connected and only nearby messages were used.
 - Read a real `__glossPrompt()` report on ChatGPT: the message numbers are arbitrary but the question is the same turn's user message and the recent ones are the turns just above.
+
+### Live checklist for the built scheme B (2026-10-17) — the real v8 sign-off
+
+Build, refresh the extension, **reload the chatgpt.com tab** (stale content script), turn the debug toggle on. Then, in a ChatGPT chat of 15+ turns:
+
+1. **Nothing broke on claude.ai:** Explain, `__glossSearch`, `__glossHybrid`, `__glossPrompt` as in v5.
+2. **Indexing:** scroll slowly down the chat. `__glossDumpChunks()` shows chunks for what you scrolled through; code blocks whole; formulas once as `$...$`; tables as `a | b | c` rows. **Check a Python block: is the indentation there?** (The fixtures cannot say.)
+3. **Explain, ordinary case:** highlight inside an answer. Read the `__glossPrompt()` report, not just the text: the question is the user message of the same turn, the recent messages are the turns just above, the excerpts are in chat order, message numbers are arbitrary but consistent.
+4. **Send a message** and let the answer finish: no "chat changed" note appears, no index wipe in the debug log. (If one does, the turn key changes when the answer finishes, and the frame logic needs the temp-key case handled.)
+5. **Switch chats from the sidebar without reloading**, then Explain: the ids and the index belong to the chat you are in.
+6. **Fast scrollbar drag, then highlight:** the explanation works; the popup says this part is not connected and only nearby messages were used; the report shows retrieval disabled. Scroll step by step back to where you were: it connects (no note).
+7. **Edit an early message** (or regenerate the last one): after an edit the next explanation shows the "chat changed" note and the index restarts from the screen; a plain regenerate replaces the old answer's chunks and shows no note.
+8. **Two tabs of the same chat:** scroll in both; each explains correctly, and neither mixes in the other's chunks.
+9. **Typing and streaming:** no lag while an answer streams; the page does not feel slower while scrolling.
+10. **ChatGPT's own selection overlay** and our Explain button do not hide each other; the popup closes on Escape and outside click.
+11. A user-only turn, an attachment-only question, a table answer, a formula highlight: each explains sensibly, or says why not.
+
+Probe tools used along the way are in the chat history only (the recorders were throwaway and are not in the repo).

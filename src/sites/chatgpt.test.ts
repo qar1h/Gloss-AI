@@ -263,11 +263,11 @@ describe('chatgptAdapter: a conflict is detected, rebuilt from, and stays visibl
 
     const status = adapter.getOrderStatus!(messages[1]!.id);
     expect(status.retrieval).toBe('ok');
-    expect(status.note).toMatch(/changed unexpectedly/);
+    expect(status.note).toMatch(/changed earlier on this page/);
     expect(status.indexGeneration).toBe(after);
 
     show(chat, ['b', 'X', 'Y'].map((i) => turn(i))); // later, a normal slide
-    expect(adapter.getOrderStatus!(P(5001, 'assistant')).note).toMatch(/changed unexpectedly/); // sticky
+    expect(adapter.getOrderStatus!(P(5001, 'assistant')).note).toMatch(/changed earlier on this page/); // sticky
     expect(adapter.getIndexGeneration?.()).toBe(after); // but no further rebuild
   });
 });
