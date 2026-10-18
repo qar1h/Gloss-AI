@@ -19,6 +19,7 @@ import {
   PARTIAL_CODE_PLACEHOLDER,
   assistantBlocks,
   blockElementText,
+  hasUnreadCode,
   hasWindowedCode,
 } from './chatgptBlocks';
 import type { SiteAdapter } from './types';
@@ -103,6 +104,26 @@ describe('hasWindowedCode', () => {
   });
 });
 
+describe('hasUnreadCode: any code the answer will not have seen', () => {
+  const unrendered = '<div data-code-block="true"><div class="cm-editor"><div class="cm-content"></div></div></div>';
+  const complete = '<div data-code-block="true"><div class="cm-content"><div class="cm-line">x = 1</div></div></div>';
+  const staticPre = '<div data-code-block="true"><pre>int main() {}</pre></div>';
+  const staticCode = '<div data-code-block="true"><div data-code-block-source="true"><code>Palindrome</code></div></div>';
+
+  it('is true for a windowed block and for a block with nothing rendered yet', () => {
+    expect(hasUnreadCode(longCode().root)).toBe(true);
+    expect(hasUnreadCode(parse(unrendered).body)).toBe(true);
+  });
+
+  it('is false for complete blocks in every shape we have seen (editor lines, <pre>, bare <code>)', () => {
+    for (const html of [complete, staticPre, staticCode]) expect(hasUnreadCode(parse(html).body)).toBe(false);
+  });
+
+  it('is true as soon as one block of several is unread', () => {
+    expect(hasUnreadCode(parse(complete + unrendered + staticPre).body)).toBe(true);
+  });
+});
+
 describe('the paragraph around a highlight inside a windowed block', () => {
   // Lines the user can see are always rendered, so the highlight's neighbourhood is real code.
   // But rendered lines on either side of a gap are NOT adjacent, so they must never be joined.
@@ -176,6 +197,13 @@ describe('the ChatGPT adapter with a windowed block in an answer', () => {
     const status = adapter.getOrderStatus!(assistant!.id);
     expect(status.note).toMatch(/only partly on the page/);
     expect(status.retrieval).toBe('ok'); // the numbering is fine; only this code is incomplete
+  });
+
+  it('also tells the user when a code block has not been drawn at all (no lines yet)', () => {
+    setup('<div data-code-block="true"><div class="cm-editor"><div class="cm-content"></div></div></div>');
+    const [, assistant] = adapter.getAllMessages();
+    expect(answer(assistant!)).toContain(PARTIAL_CODE_PLACEHOLDER);
+    expect(adapter.getOrderStatus!(assistant!.id).note).toMatch(/only partly on the page/);
   });
 
   it('says nothing about code when the answer has none, or only complete blocks', () => {

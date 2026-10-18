@@ -55,6 +55,20 @@ export function isWindowedCode(block: Element): boolean {
   return block.querySelector(GAP) !== null;
 }
 
+/**
+ * True when a code block's code was NOT fully read: part of it is not rendered (a gap), or none of
+ * it is (no lines, no <pre>, no <code>: an editor that has not drawn yet). Both become the same
+ * placeholder, so both need the same note to the user.
+ */
+export function isUnreadCode(block: Element): boolean {
+  return isWindowedCode(block) || codeOf(block) === '';
+}
+
+/** True when an answer contains a code block the answer will not have seen all of. */
+export function hasUnreadCode(root: Element): boolean {
+  return (root.matches(CODE_BLOCK) && isUnreadCode(root)) || Array.from(root.querySelectorAll(CODE_BLOCK)).some(isUnreadCode);
+}
+
 /** True when an answer contains a code block that is only partly on the page. */
 export function hasWindowedCode(root: Element): boolean {
   return (root.matches(CODE_BLOCK) && isWindowedCode(root)) || Array.from(root.querySelectorAll(CODE_BLOCK)).some(isWindowedCode);

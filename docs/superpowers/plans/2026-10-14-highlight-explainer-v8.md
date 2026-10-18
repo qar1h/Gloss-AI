@@ -510,3 +510,37 @@ Probe tools used along the way are in the chat history only (the recorders were 
 **Capturing fixtures:** the editor may format a pasted file. Turn off format-on-paste/save for `fixtures/*.html` (or paste through a plain-text editor) and check that the file is not CRLF-wrapped. A fixture is trusted for structure only if you are not sure.
 
 - **New in the final shape:** select text in a turn that has a question and no answer (or any part of a turn that is not the question or the answer, such as its action bar) and click Explain. Expect a popup with a sentence saying it cannot read this part, never nothing. Select text in the sidebar or the composer and click Explain: expect "not part of a chat message". While an answer streams, select inside it: expect "still being written".
+
+- **Indentation: PASSED.** Real spaces in the text (nesting 0/4/8/12/16 on three Python blocks).
+- **Empty code blocks:** 5-6 of 14 on one page had zero `.cm-line`. Run this to tell "off screen, not drawn yet" from "a `<pre>`/`<code>` shape" from "empty although visible":
+
+```js
+(() => {
+  const blocks = [...document.querySelectorAll('[data-code-block]')];
+  const rows = blocks.map((b, i) => {
+    const cm = b.querySelectorAll('.cm-line').length;
+    const pre = [...b.querySelectorAll('pre')];
+    const code = [...b.querySelectorAll('code')];
+    const rect = b.getBoundingClientRect();
+    const turn = b.closest('[data-turn-key]');
+    const cv = (el) => (el ? getComputedStyle(el).contentVisibility : null);
+    return {
+      i,
+      shape: cm ? 'editor lines' : pre.length ? 'pre' : code.length ? 'code' : 'EMPTY',
+      cmLines: cm,
+      gaps: b.querySelectorAll('.cm-gap').length,
+      editor: !!b.querySelector('.cm-editor'),
+      contentChildren: b.querySelector('.cm-content') ? b.querySelector('.cm-content').children.length : null,
+      preChars: pre.reduce((n, p) => n + p.textContent.length, 0),
+      codeChars: code.reduce((n, p) => n + p.textContent.length, 0),
+      height: Math.round(rect.height),
+      topFromViewport: Math.round(rect.top),
+      onScreen: rect.bottom > 0 && rect.top < innerHeight,
+      turnContentVisibility: cv(turn),
+      blockContentVisibility: cv(b),
+    };
+  });
+  console.table(rows);
+  console.log('summary:', rows.reduce((a, r) => ((a[r.shape] = (a[r.shape] || 0) + 1), a), {}));
+})();
+```
