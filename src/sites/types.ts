@@ -97,6 +97,14 @@ export interface SiteAdapter {
   getMessageBlocks(el: HTMLElement): Block[];
 
   /**
+   * Only for sites that may hand a DOM element to a different message as the user scrolls (a
+   * virtualized list that recycles rows). Says whether `message.element` still is that message.
+   * The indexer asks before it reads the element and again before it writes what it read, so one
+   * turn's text is never stored under another turn's id. Omit it and the element is trusted.
+   */
+  isMessageCurrent?(message: SiteMessage): boolean;
+
+  /**
    * Only for sites whose message positions are valid for part of a page's life (ChatGPT). A string
    * naming the numbering the current ids belong to; it changes whenever stored positions stop
    * being valid. The stored index is wiped when it differs from the one it was written under

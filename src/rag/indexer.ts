@@ -1,4 +1,5 @@
 import { requireAdapter } from '@/sites';
+import type { SiteMessage } from '@/sites/types';
 import { getSettings, type Settings } from '@/options/storage';
 import { chunkMessage, CHUNKER_VERSION } from './chunker';
 import { hashText } from './hash';
@@ -73,27 +74,33 @@ function startIndexPass(): void {
     });
 }
 
-async function runIndexPass(): Promise<void> {
-  const conversationId = requireAdapter().getConversationId();
-  if (!conversationId) return;
-
+/** One indexing pass. Exported only so tests can drive it; in the extension it runs from the debounced observer. */
+export async function runIndexPass(): Promise<void> {
   const settings = await getSettings();
 
+  // Everything about the page is read here, in one tick, after the last await so far: which chat
+  // this is, its messages, and which numbering they carry. Read the chat before an await and the
+  // messages after it, and a navigation in between files one chat's messages under another's id.
+  // (Reading the page can renumber a site whose positions are session-scoped, so the generation
+  // is asked for after the messages.) Rows written under another numbering are wiped before we
+  // write under this one (see generationGate.ts).
+  const adapter = requireAdapter();
+  const conversationId = adapter.getConversationId();
+  if (!conversationId) return;
+
   if (settings.debugEnabled) {
-    const unrecognized = requireAdapter().getUnrecognizedRowIds();
+    const unrecognized = adapter.getUnrecognizedRowIds();
     if (unrecognized.length > 0) {
       console.log('[highlight-explainer] rows with no recognized role/id (never indexed):', unrecognized);
     }
   }
 
-  // Read the page first (this can renumber a site whose positions are session-scoped), then ask
-  // which numbering that is, in the same tick, so the two always agree. Rows written under another
-  // numbering are wiped before we write under this one (see generationGate.ts).
-  const adapter = requireAdapter();
   const messages = adapter.getAllMessages();
   const generation = adapter.getIndexGeneration?.() ?? null;
   await ensureIndexGeneration(conversationId, generation);
   const renumbered = () => (adapter.getIndexGeneration?.() ?? null) !== generation;
+  // A virtualized list can hand an element to another turn while this pass awaits (see SiteAdapter).
+  const stillThere = (message: SiteMessage) => adapter.isMessageCurrent?.(message) ?? true;
 
   const warnedBadIds = new Set<string>();
   for (const message of messages) {
@@ -114,6 +121,7 @@ async function runIndexPass(): Promise<void> {
       continue;
     }
     const key = `${conversationId}:${message.id}`;
+    if (!stillThere(message)) continue;
 
     if (requireAdapter().isStreaming(message.element)) {
       const firstSeen = streamingSince.get(key);
@@ -141,6 +149,7 @@ async function runIndexPass(): Promise<void> {
       existing.textHash === textHash &&
       existing.chunkerVersion === CHUNKER_VERSION;
     if (unchanged) continue;
+    if (!stillThere(message)) continue; // the awaits above are long enough for the element to be reused
 
     const blocks = requireAdapter().getMessageBlocks(message.element);
     const chunks = await chunkMessage(conversationId, message.id, message.role, blocks);
@@ -159,6 +168,16 @@ async function runIndexPass(): Promise<void> {
     if (renumbered()) {
       scheduleIndexPass();
       return;
+    }
+    if (!stillThere(message)) continue;
+    // No record means whatever this tab remembers about these chunk ids is stale: another tab (or a
+    // wipe) deleted the rows, and a cached "already embedded" would keep the new chunks from ever
+    // getting a vector. (The first version of the two-tab fix caused exactly this.)
+    if (existing === undefined) {
+      forgetEmbeddingStatuses(
+        conversationId,
+        chunks.map((c) => c.id),
+      );
     }
     await replaceMessage(record, chunks, previousChunkIds);
     // replaceMessage drops the embedding rows of chunk ids this message no longer has —

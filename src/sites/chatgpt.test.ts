@@ -334,6 +334,58 @@ describe('chatgptAdapter: turns that are not the usual user + assistant pair', (
   });
 });
 
+describe('chatgptAdapter.isMessageCurrent (F5)', () => {
+  it('is true for a message whose element is still that message', () => {
+    show(nextChat(), ['a', 'b'].map((i) => turn(i)));
+    for (const m of adapter.getAllMessages()) expect(adapter.isMessageCurrent!(m)).toBe(true);
+  });
+
+  it('is false once the page has replaced the element, even though the turn key is the same', () => {
+    const chat = nextChat();
+    show(chat, ['a', 'b'].map((i) => turn(i)));
+    const before = adapter.getAllMessages();
+    show(chat, ['a', 'b'].map((i) => turn(i))); // same turns, new DOM nodes (a recycled row)
+    for (const m of before) expect(adapter.isMessageCurrent!(m)).toBe(false);
+    for (const m of adapter.getAllMessages()) expect(adapter.isMessageCurrent!(m)).toBe(true);
+  });
+
+  it('is false once the message has been scrolled out of the window', () => {
+    const chat = nextChat();
+    show(chat, ['a', 'b', 'c'].map((i) => turn(i)));
+    const first = adapter.getAllMessages()[0]!;
+    show(chat, ['c', 'd', 'e'].map((i) => turn(i)));
+    expect(adapter.isMessageCurrent!(first)).toBe(false);
+  });
+
+  it('is false when the id now belongs to a different element (a recycled row showing another turn)', () => {
+    const chat = nextChat();
+    show(chat, ['a', 'b'].map((i) => turn(i)));
+    adapter.getAllMessages();
+    const doc = show(chat, ['a', 'b'].map((i) => turn(i)));
+    const stale = { id: String(5000 * 2), role: 'user' as const, element: doc.createElement('div') };
+    expect(adapter.isMessageCurrent!(stale)).toBe(false);
+  });
+});
+
+describe('chatgptAdapter: the page must agree with the URL about the chat on every turn (F7)', () => {
+  it('refuses to read a mixed render in which a later turn already belongs to another chat', () => {
+    const chat = nextChat();
+    const own = `<div data-chatgpt-selection-conversation-id="${chat}"></div>`;
+    const other = '<div data-chatgpt-selection-conversation-id="some-other-chat"></div>';
+    const html = [turn('a'), turn('b')].map((t, i) => t.replace('<p>', (i === 0 ? own : other) + '<p>')).join('');
+    loadDom(`<div data-thread-find-target="conversation">${html}</div>`, `/c/${chat}`);
+    expect(adapter.getAllMessages()).toEqual([]);
+  });
+
+  it('reads normally when every turn agrees', () => {
+    const chat = nextChat();
+    const own = `<div data-chatgpt-selection-conversation-id="${chat}"></div>`;
+    const html = [turn('a'), turn('b')].map((t) => t.replace('<p>', own + '<p>')).join('');
+    loadDom(`<div data-thread-find-target="conversation">${html}</div>`, `/c/${chat}`);
+    expect(adapter.getAllMessages()).toHaveLength(4);
+  });
+});
+
 describe('chatgptAdapter: ids always satisfy the position contract', () => {
   it('only ever produces decimal-integer ids', () => {
     const chat = nextChat();

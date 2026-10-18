@@ -106,8 +106,11 @@ function readSnapshot(): Snapshot | null {
 
   // Mid-navigation the URL and the page can briefly disagree about which chat this is. Feeding
   // one chat's turns into another's frame would be a well-formed but wrong index, so wait.
-  const domId = document.querySelector<HTMLElement>(DOM_CONVERSATION_ID)?.dataset.chatgptSelectionConversationId;
-  if (domId && domId !== conversationId) return null;
+  // Every turn carries it, and a render can be half old, half new: all of them must agree.
+  for (const marked of Array.from(document.querySelectorAll<HTMLElement>(DOM_CONVERSATION_ID))) {
+    const domId = marked.dataset.chatgptSelectionConversationId;
+    if (domId && domId !== conversationId) return null;
+  }
 
   // The window handed to the frame stops at the first turn still being written: its key may change
   // when it finishes, and what follows it is not consecutive with anything we trust.
@@ -190,6 +193,12 @@ export const chatgptAdapter: SiteAdapter = {
     // Not placed: a turn still being written, or one we cannot read unambiguously.
     if (!snapshot || id === undefined || !role) return null;
     return { id, role, element };
+  },
+
+  isMessageCurrent(message: SiteMessage): boolean {
+    // A virtualized list can recycle a row for another turn. The message is current only if the page
+    // still maps its id to this very element.
+    return readSnapshot()?.byId.get(message.id)?.element === message.element;
   },
 
   getMessageText(el: HTMLElement): string {
