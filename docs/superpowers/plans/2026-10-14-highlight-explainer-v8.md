@@ -496,3 +496,15 @@ Part B: the normal flows.
 15. A user-only turn, an attachment-only question, a table answer and a formula highlight each explain sensibly, or say why not.
 
 Probe tools used along the way are in the chat history only (the recorders were throwaway and are not in the repo).
+
+### Results so far from the live checklist (2026-10-18)
+
+- **Item 3 (element recycling): `reused: 0`** over 130 samples. The F5 guard is insurance only.
+- **Item 4 (answer bodies): no turn has two.** Three consecutive turns (5, 6, 7 of 10) have a question and NO answer body. They are handled (numbered, question indexed, neighbours unaffected). Whether the answers are genuinely absent or rendered under an attribute we do not know is open; the question-only probe in the chat history decides it, and a selection inside such a turn currently opens no popup (proposed: say so).
+- **Item 5 (CodeMirror): it does virtualize.** Handled as "windowed code" (see CLAUDE.md, v8 notes). Open: confirm indentation on a nested block with the `leadingSpaces` one-liner below (no fixture can answer it).
+
+```js
+[...document.querySelectorAll('[data-code-block]')].map((b, i) => ({ block: i, leadingSpaces: [...b.querySelectorAll('.cm-line')].slice(0, 40).map((l) => (l.textContent.match(/^[ \t]*/)[0] || '').length).join(' ') }))
+```
+
+**Capturing fixtures:** the editor may format a pasted file. Turn off format-on-paste/save for `fixtures/*.html` (or paste through a plain-text editor) and check that the file is not CRLF-wrapped. A fixture is trusted for structure only if you are not sure.

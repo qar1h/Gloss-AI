@@ -32,8 +32,32 @@ const BLOCK_ANCESTORS = `${CODE_BLOCK}, pre, p, li, h1, h2, h3, h4, h5, h6, bloc
 const BLOCKISH = 'p, div, section, article, li, ul, ol, table, thead, tbody, tr, td, th, h1, h2, h3, h4, h5, h6, blockquote, pre, br';
 const INLINE_TAGS = /^(span|a|strong|b|em|i|u|s|code|sub|sup|mark|small|abbr|kbd|del|ins|time|label|font)$/i;
 
+// A code block is a CodeMirror editor, and CodeMirror only renders the lines near the viewport. The
+// rest of a long block is a `.cm-gap` spacer with an explicit height (seen live: every block stuck
+// at 36 rendered lines had one gap, the complete 15- and 18-line blocks had none; and a block can
+// have a gap on both sides of its rendered lines). Read as plain lines, such a block would be
+// indexed as if it were the whole code, with half of it missing and nothing saying so, and its text
+// would change whenever the page scrolled (a new hash, a re-embed of a different slice). So a
+// windowed block is never read as code: it is one constant placeholder. The lines the user can see
+// are still used as the paragraph around a highlight, with markers where the code runs off the page.
+const GAP = '.cm-content .cm-gap';
+export const PARTIAL_CODE_PLACEHOLDER = '[a code block here is not fully on the page, so its code was not read]';
+export const CODE_ABOVE_NOT_ON_PAGE = '[… more code above is not on the page …]';
+export const CODE_BELOW_NOT_ON_PAGE = '[… more code below is not on the page …]';
+export const CODE_BETWEEN_NOT_ON_PAGE = '[… code not on the page …]';
+
 function collapse(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+/** True when CodeMirror has left part of this block unrendered. */
+export function isWindowedCode(block: Element): boolean {
+  return block.querySelector(GAP) !== null;
+}
+
+/** True when an answer contains a code block that is only partly on the page. */
+export function hasWindowedCode(root: Element): boolean {
+  return (root.matches(CODE_BLOCK) && isWindowedCode(root)) || Array.from(root.querySelectorAll(CODE_BLOCK)).some(isWindowedCode);
 }
 
 /** A formula's TeX source from the annotation KaTeX keeps; the MathML text if there is none. */
@@ -98,6 +122,76 @@ function push(out: Block[], type: Block['type'], text: string): void {
   if (text) out.push({ type, text });
 }
 
+/**
+ * A code block as a block. Complete: its code. Windowed, or with nothing rendered yet: the constant
+ * placeholder (as a paragraph, so it joins the prose around it instead of becoming a chunk of its
+ * own). The text never depends on which lines happen to be rendered.
+ */
+function pushCode(block: Element, out: Block[]): void {
+  if (isWindowedCode(block)) return push(out, 'paragraph', PARTIAL_CODE_PLACEHOLDER);
+  const text = codeOf(block);
+  if (text) out.push({ type: 'code', text });
+  else push(out, 'paragraph', PARTIAL_CODE_PLACEHOLDER);
+}
+
+interface Run {
+  lines: Element[];
+  gapBefore: boolean;
+  gapAfter: boolean;
+}
+
+/** The rendered lines of a windowed block, grouped into runs of adjacent lines, with where the gaps are. */
+function runsOf(block: Element): Run[] {
+  const runs: Run[] = [];
+  const content = block.querySelector('.cm-content');
+  if (!content) return runs;
+  let current: Run | null = null;
+  let gapSeen = false;
+  for (const child of Array.from(content.children)) {
+    if (child.matches('.cm-gap')) {
+      if (current) current.gapAfter = true;
+      current = null;
+      gapSeen = true;
+    } else if (child.matches('.cm-line')) {
+      if (!current) {
+        current = { lines: [], gapBefore: gapSeen, gapAfter: false };
+        runs.push(current);
+        gapSeen = false;
+      }
+      current.lines.push(child);
+    }
+  }
+  return runs;
+}
+
+/**
+ * The code a user can see around a highlight in a windowed block: the run of adjacent rendered lines
+ * that holds the anchor, with a marker on each side where the code continues off the page. Lines on
+ * either side of a gap are not adjacent in the file and are never joined. If the anchor is not in a
+ * line, every run is returned, kept apart by a marker.
+ */
+function windowedRunText(block: Element, anchor?: Node): string {
+  const runs = runsOf(block);
+  const start = anchor ? (anchor.nodeType === 1 ? (anchor as Element) : anchor.parentElement) : null;
+  const anchorLine = start?.closest('.cm-line') ?? null;
+  const hit = anchorLine ? runs.find((r) => r.lines.includes(anchorLine)) : undefined;
+  if (hit) {
+    return [
+      ...(hit.gapBefore ? [CODE_ABOVE_NOT_ON_PAGE] : []),
+      ...hit.lines.map(cmLineText),
+      ...(hit.gapAfter ? [CODE_BELOW_NOT_ON_PAGE] : []),
+    ].join('\n');
+  }
+  const rows: string[] = [];
+  runs.forEach((run, i) => {
+    if (i === 0 && run.gapBefore) rows.push(CODE_ABOVE_NOT_ON_PAGE);
+    if (i > 0) rows.push(CODE_BETWEEN_NOT_ON_PAGE);
+    rows.push(...run.lines.map(cmLineText));
+    if (i === runs.length - 1 && run.gapAfter) rows.push(CODE_BELOW_NOT_ON_PAGE);
+  });
+  return rows.join('\n');
+}
+
 function visitList(list: Element, out: Block[]): void {
   for (const li of Array.from(list.children)) {
     if (li.tagName.toLowerCase() !== 'li') continue;
@@ -112,7 +206,7 @@ function visitNested(el: Element, out: Block[]): void {
     const tag = child.tagName.toLowerCase();
     if (child.matches(EXCLUDE)) continue;
     if (tag === 'ul' || tag === 'ol') visitList(child, out);
-    else if (child.matches(CODE_BLOCK)) push(out, 'code', codeOf(child));
+    else if (child.matches(CODE_BLOCK)) pushCode(child, out);
     else if (tag === 'table') visitTable(child, out);
     else if (tag === 'pre') push(out, 'code', normalizeCode(child.textContent ?? ''));
     else if (child.querySelector(NESTED)) visitNested(child, out);
@@ -166,7 +260,7 @@ function visit(el: Element, out: Block[]): void {
   if (el.matches(EXCLUDE)) return;
   const tag = el.tagName.toLowerCase();
 
-  if (el.matches(CODE_BLOCK)) return push(out, 'code', codeOf(el));
+  if (el.matches(CODE_BLOCK)) return pushCode(el, out);
   if (el.matches(MATH_DISPLAY)) return push(out, 'paragraph', `$$${formulaOf(el)}$$`);
   if (tag === 'p') return push(out, 'paragraph', textOf(el, NESTED));
   if (/^h[1-6]$/.test(tag)) return push(out, 'heading', textOf(el));
@@ -189,7 +283,7 @@ function visit(el: Element, out: Block[]): void {
 export function assistantBlocks(root: Element): Block[] {
   const out: Block[] = [];
   if (root.matches(CODE_BLOCK)) {
-    push(out, 'code', codeOf(root));
+    pushCode(root, out);
     return out;
   }
   visitChildren(root, out);
@@ -216,8 +310,9 @@ export function blockElementFor(node: Node): Element | null {
 }
 
 /** The text of one block element, as extraction above would give it (code keeps its newlines). */
-export function blockElementText(el: Element): string {
-  if (el.matches(CODE_BLOCK)) return codeOf(el);
+export function blockElementText(el: Element, anchor?: Node): string {
+  // `anchor` (where the selection starts) matters only for a windowed code block, to pick the run of lines around it.
+  if (el.matches(CODE_BLOCK)) return isWindowedCode(el) ? windowedRunText(el, anchor) : codeOf(el);
   if (el.tagName.toLowerCase() === 'pre') return normalizeCode(el.textContent ?? '');
   if (el.tagName.toLowerCase() === 'li') return textOf(el, NESTED);
   return textOf(el, NESTED);

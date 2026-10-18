@@ -21,7 +21,7 @@ import type { Block } from '../rag/types';
 import type { OrderStatus } from '../context/types';
 import { blocksToText } from '../rag/chunker'; // relative on purpose: loadable under vitest, which has no `@/` alias
 import { NAMESPACE_SEPARATOR } from '../rag/namespace';
-import { assistantBlocks, blockElementFor, blockElementText, userBlocks } from './chatgptBlocks';
+import { assistantBlocks, blockElementFor, blockElementText, hasWindowedCode, userBlocks } from './chatgptBlocks';
 import { TurnSequence, isLocalPosition, positionOf, type Role } from './turnSequence';
 
 const TURN = '[data-turn-key]';
@@ -212,7 +212,7 @@ export const chatgptAdapter: SiteAdapter = {
   getParagraphAround(range: Range): string {
     const anchor = range.commonAncestorContainer;
     const block = blockElementFor(anchor);
-    if (block?.closest(ASSISTANT)) return blockElementText(block);
+    if (block?.closest(ASSISTANT)) return blockElementText(block, range.startContainer);
     const start = anchor.nodeType === 1 ? (anchor as Element) : anchor.parentElement;
     const bubble = start?.closest(USER);
     if (bubble) {
@@ -323,6 +323,12 @@ export const chatgptAdapter: SiteAdapter = {
     const detached = isLocalPosition(Number(messageId));
     if (detached) {
       notes.push("this part of the chat isn't connected to the part indexed so far (you jumped here), so only nearby messages were used");
+    }
+    // CodeMirror renders only the lines near the viewport; the rest of a long block is a gap. Such code
+    // is not read (see chatgptBlocks.ts), and the user is told, because the answer will not have seen it.
+    const entry = snapshot.byId.get(messageId);
+    if (entry && hasWindowedCode(entry.element)) {
+      notes.push('code in this message is only partly on the page, so only the part you can see was read');
     }
     return {
       retrieval: detached ? 'disabled' : 'ok',

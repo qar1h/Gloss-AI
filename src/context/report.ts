@@ -76,7 +76,7 @@ export function describeCoveragePopup(report: PromptReport, coverage: Coverage):
     parts.push(`${coverage.indexedMessages} messages indexed`);
   }
 
-  // A site's caveat about message order goes first: it is the one thing the user must not miss.
+  // A site's caveat about what the page gave us (message order, code only partly on the page) goes first: it is the one thing the user must not miss.
   if (report.orderNote) parts.unshift(report.orderNote);
 
   const text = parts.join(' · ');

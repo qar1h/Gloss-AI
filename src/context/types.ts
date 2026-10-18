@@ -36,7 +36,7 @@ export interface OrderStatus {
    * material is still sent.
    */
   retrieval: 'ok' | 'disabled';
-  /** A plain sentence for the popup and the debug report, or null when there is nothing to say. */
+  /** A plain sentence for the popup and the debug report, or null. A caveat about what the page gave us: the message order, or content that was only partly on the page. */
   note: string | null;
   /** The numbering the ids were assigned under; the stored index is wiped if it was written under another. */
   indexGeneration: string | null;
@@ -130,7 +130,7 @@ export interface PromptReport {
   demotedRecent: { id: string; estTokens: number }[];
   questionState: QuestionState;
   recentShortfall: { wanted: number; found: number } | null;
-  /** A site-supplied caveat about message order (see OrderStatus), shown in the popup. */
+  /** A site-supplied caveat (see OrderStatus: message order, or content only partly on the page), shown first in the popup. */
   orderNote: string | null;
 }
 
