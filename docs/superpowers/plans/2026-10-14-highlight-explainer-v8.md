@@ -508,3 +508,5 @@ Probe tools used along the way are in the chat history only (the recorders were 
 ```
 
 **Capturing fixtures:** the editor may format a pasted file. Turn off format-on-paste/save for `fixtures/*.html` (or paste through a plain-text editor) and check that the file is not CRLF-wrapped. A fixture is trusted for structure only if you are not sure.
+
+- **New in the final shape:** select text in a turn that has a question and no answer (or any part of a turn that is not the question or the answer, such as its action bar) and click Explain. Expect a popup with a sentence saying it cannot read this part, never nothing. Select text in the sidebar or the composer and click Explain: expect "not part of a chat message". While an answer streams, select inside it: expect "still being written".

@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseHTML } from 'linkedom';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SiteAdapter } from './types';
 
 let adapter: SiteAdapter;
@@ -30,6 +30,8 @@ interface TurnOptions {
   user?: string | null;
   assistant?: string | null;
   assistantRenderers?: number;
+  /** Extra markup inside the turn, next to the question and the answer (an unfamiliar layout). */
+  extra?: string;
 }
 
 function turn(id: string, o: TurnOptions = {}): string {
@@ -39,7 +41,7 @@ function turn(id: string, o: TurnOptions = {}): string {
       : `<div data-user-message-bubble="true"><div class="whitespace-pre-wrap">${o.user ?? `question ${id}`}</div></div>`;
   const renderers = o.assistant === null ? 0 : (o.assistantRenderers ?? 1);
   const assistant = Array.from({ length: renderers }, (_, i) => `<div data-dil-message-id="m-${id}-${i}"><p>${o.assistant ?? `answer ${id}`}</p></div>`).join('');
-  return `<div class="wrapper"><div data-turn-key="${id}"><div data-content-search-turn-key="fallback-turn-0"><div data-talvt-turn-state="${o.state ?? 'complete'}">${user}${assistant}</div></div></div></div>`;
+  return `<div class="wrapper"><div data-turn-key="${id}"><div data-content-search-turn-key="fallback-turn-0"><div data-talvt-turn-state="${o.state ?? 'complete'}">${user}${assistant}${o.extra ?? ''}</div></div></div></div>`;
 }
 
 /** Shows `turns` as the mounted window of chat `chat` (what the page does as you scroll). */
@@ -383,6 +385,72 @@ describe('chatgptAdapter: the page must agree with the URL about the chat on eve
     const html = [turn('a'), turn('b')].map((t) => t.replace('<p>', own + '<p>')).join('');
     loadDom(`<div data-thread-find-target="conversation">${html}</div>`, `/c/${chat}`);
     expect(adapter.getAllMessages()).toHaveLength(4);
+  });
+});
+
+describe('chatgptAdapter.explainBlockedReason: a selection the adapter cannot read says why', () => {
+  const reason = (node: Node) => adapter.explainBlockedReason!(node);
+  const q = <T extends Element>(selector: string) => document.querySelector(selector) as unknown as T;
+  let info: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+  });
+  afterEach(() => info.mockRestore());
+
+  it('has nothing to say about a message it can read', () => {
+    show(nextChat(), [turn('a')]);
+    const node = q('[data-dil-message-id] p');
+    expect(adapter.getMessageForNode(node)).not.toBeNull();
+    expect(reason(node)).toBeNull();
+  });
+
+  it('says so for a part of a turn that is neither the question nor the answer (an action bar, an unfamiliar layout)', () => {
+    show(nextChat(), [turn('a', { extra: '<button aria-label="Copy" id="bar">x</button>' })]);
+    expect(reason(q('#bar'))).toMatch(/unfamiliar message layout/);
+  });
+
+  it('says so for the content of a question-only turn that is rendered some other way, and logs only its structure', () => {
+    show(nextChat(), [turn('q', { assistant: null, extra: '<div data-some-new-renderer="1"><p id="x">picture caption</p></div>' })]);
+    const node = q('#x');
+    expect(adapter.getMessageForNode(node)).toBeNull();
+    expect(reason(node)).toMatch(/unfamiliar message layout/);
+    const logged = JSON.stringify(info.mock.calls);
+    expect(logged).toContain('data-some-new-renderer'); // what a fixture needs in order to teach us the layout
+    expect(logged).not.toContain('picture caption'); // never the chat's text
+  });
+
+  it('says so for a turn with more than one answer body, which it will not guess between', () => {
+    show(nextChat(), [turn('b', { assistantRenderers: 2 })]);
+    expect(reason(q('[data-dil-message-id] p'))).toMatch(/more than one answer/);
+  });
+
+  it('says a message is still being written, and that messages after it have to wait', () => {
+    show(nextChat(), [turn('a'), turn('b', { state: 'in_progress' }), turn('c')]);
+    const renderers = Array.from(document.querySelectorAll('[data-dil-message-id] p'));
+    expect(reason(renderers[1]!)).toMatch(/still being written/);
+    expect(reason(renderers[2]!)).toMatch(/messages above this one are still being written/);
+    expect(reason(renderers[0]!)).toBeNull(); // the one before it is fine
+  });
+
+  it('says a selection outside the chat is not a message', () => {
+    const doc = show(nextChat(), [turn('a')]);
+    const sidebar = doc.createElement('div');
+    sidebar.id = 'sidebar';
+    doc.body.appendChild(sidebar);
+    expect(reason(sidebar)).toMatch(/not part of a chat message/);
+  });
+
+  it('says to open a saved chat when the page has no chat id', () => {
+    loadDom('<div id="home">Where should we begin?</div>', '/');
+    expect(reason(document.querySelector('#home') as unknown as Node)).toMatch(/Open a saved chat/);
+  });
+
+  it('says it cannot tell which chat this is while the page and the URL disagree', () => {
+    const chat = nextChat();
+    const own = '<div data-chatgpt-selection-conversation-id="some-other-chat"></div>';
+    loadDom(`<div data-thread-find-target="conversation">${turn('a').replace('<p>', own + '<p>')}</div>`, `/c/${chat}`);
+    expect(reason(document.querySelector('[data-dil-message-id] p') as unknown as Node)).toMatch(/which chat/);
   });
 });
 

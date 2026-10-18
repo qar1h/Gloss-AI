@@ -11,7 +11,7 @@ import { prepareExplainPrompt, type DebugOverride, type PreparedExplain } from '
 import { resolveRecentCount } from '@/context/limits';
 import { candidateTable, describeCoverageForConsole, sectionTable, summaryLines } from '@/context/report';
 import type { RawFocal } from '@/context/types';
-import { rawFocalForMessage, readRawFocal } from './readFocal';
+import { rawFocalForMessage, readRawFocal, whyNotExplainable } from './readFocal';
 
 const TAG = '[highlight-explainer]';
 
@@ -69,7 +69,7 @@ async function dryRun(textOrOptions?: string | PromptDebugOptions, maybeOptions?
     return;
   }
   if (!raw) {
-    console.warn(`${TAG} the selection is not inside a recognized chat message.`);
+    console.warn(`${TAG} ${(selection && selection.rangeCount > 0 && whyNotExplainable(selection.getRangeAt(0))) || 'the selection is not inside a recognized chat message.'}`);
     return;
   }
 

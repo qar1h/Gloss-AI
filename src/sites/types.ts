@@ -118,6 +118,14 @@ export interface SiteAdapter {
    */
   getOrderStatus?(messageId: string): OrderStatus;
 
+  /**
+   * Optional. Called when a selection is NOT inside a message the adapter can read. Returns one plain
+   * sentence saying why (a message still being written, a layout it does not recognise, a part of
+   * the page that is not a message), which the popup shows. A click must never end in silence. Omit
+   * it and the click does nothing, as before. Must contain no chat text (it may be logged).
+   */
+  explainBlockedReason?(node: Node): string | null;
+
   /** Debug only: ids (or a placeholder) of DOM rows getAllMessages() couldn't recognize
    * (missing role or id) — lets the indexer log what it's silently not indexing. */
   getUnrecognizedRowIds(): string[];

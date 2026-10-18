@@ -39,6 +39,19 @@ export function rawFocalForMessage(message: SiteMessage, highlight: string, para
   };
 }
 
+/**
+ * Why a selection could not be explained, in a sentence for the popup, or null when the site has
+ * nothing to say (the click then does nothing, as it always did on claude.ai). The message having
+ * been found but refused is the id guard above; anything else is the adapter's to explain.
+ */
+export function whyNotExplainable(range: Range): string | null {
+  const adapter = requireAdapter();
+  if (adapter.getMessageForNode(range.startContainer)) {
+    return 'I found this message, but its position on the page looks wrong, so I did not use it. The console has details.';
+  }
+  return adapter.explainBlockedReason?.(range.startContainer) ?? null;
+}
+
 export function readRawFocal(range: Range, highlight: string): RawFocal | null {
   const message = requireAdapter().getMessageForNode(range.startContainer);
   if (!message) return null;

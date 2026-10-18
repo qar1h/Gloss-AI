@@ -337,6 +337,41 @@ export const chatgptAdapter: SiteAdapter = {
     };
   },
 
+  explainBlockedReason(node: Node): string | null {
+    if (!conversationIdFromUrl()) return 'Open a saved chat to use Explain: this page has no chat yet.';
+    const snapshot = readSnapshot();
+    if (!snapshot) return "I can't tell which chat this page is showing yet (the page may be changing). Try again in a moment.";
+
+    const start = node.nodeType === 1 ? (node as Element) : node.parentElement;
+    const turnEl = start?.closest<HTMLElement>(TURN) ?? null;
+    if (!turnEl) return 'This text is not part of a chat message, so there is nothing to explain.';
+
+    const messageEl = start?.closest(`${USER}, ${ASSISTANT}`);
+    if (messageEl && snapshot.byElement.has(messageEl)) return null; // readable: nothing to explain away
+
+    const view = snapshot.turns.find((t) => t.key === turnEl.dataset.turnKey);
+    let why: string;
+    if (isWriting(turnEl)) why = 'This message is still being written. Try again when it has finished.';
+    else if (!view) why = "The messages above this one are still being written, so it can't be placed yet. Try again when they have finished.";
+    else if (!view.recognized) why = "I can't read this message: it has more than one answer body, a layout I don't understand yet.";
+    else why = "I can't read this part of the chat (an unfamiliar message layout). It is not a normal question or answer.";
+
+    // Structure only, never text: enough to capture the layout as a fixture and teach the adapter.
+    const bubble = turnEl.querySelector(USER);
+    const outside = Array.from(turnEl.querySelectorAll('*')).filter((e) => !bubble || (!bubble.contains(e) && !e.contains(bubble)));
+    const names = new Set<string>();
+    for (const e of outside) for (const a of Array.from(e.attributes)) if (a.name.startsWith('data-') || a.name === 'role') names.add(a.name);
+    console.info('[highlight-explainer] cannot explain the selected part of the chat:', {
+      why,
+      turn: short(turnEl.dataset.turnKey ?? ''),
+      state: turnEl.querySelector<HTMLElement>(TURN_STATE)?.dataset.talvtTurnState,
+      questions: turnEl.querySelectorAll(USER).length,
+      answers: turnEl.querySelectorAll(ASSISTANT).length,
+      attributesOutsideTheQuestion: Array.from(names).sort(),
+    });
+    return why;
+  },
+
   getUnrecognizedRowIds(): string[] {
     const snapshot = readSnapshot();
     if (!snapshot) return [];
