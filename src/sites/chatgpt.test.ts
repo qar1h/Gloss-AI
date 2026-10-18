@@ -454,6 +454,85 @@ describe('chatgptAdapter.explainBlockedReason: a selection the adapter cannot re
   });
 });
 
+describe('chatgptAdapter: switching chats in the sidebar (B4)', () => {
+  // After a sidebar switch the previous chat's tree can stay mounted (hidden) while the new one is
+  // shown. Only the tree that belongs to the URL's chat may be read, and a stale one must never
+  // veto it. The first version required EVERY marker in the whole document to agree with the URL,
+  // so one leftover element made the adapter refuse to read until the page was reloaded.
+  const marker = (id: string) => `<div data-chatgpt-selection-conversation-id="${id}"></div>`;
+  const marked = (turnHtml: string, id: string) => turnHtml.replace('<p>', marker(id) + '<p>');
+  const root = (inner: string, hidden = false) => `<div data-thread-find-target="conversation"${hidden ? ' hidden=""' : ''}>${inner}</div>`;
+  const page = (chat: string, html: string) => loadDom(html, `/c/${chat}`);
+  const stale = () => root(marked(turn('old1'), 'old-chat') + marked(turn('old2'), 'old-chat'), true);
+
+  it('reads the live chat while the previous chat is still mounted, hidden, before it in the page', () => {
+    const chat = nextChat();
+    page(chat, stale() + root(marked(turn('a'), chat) + marked(turn('b'), chat)));
+    const messages = adapter.getAllMessages();
+    expect(messages).toHaveLength(4);
+    expect(messages.every((m) => m.element.closest('[hidden]') === null)).toBe(true);
+    // The tree the indexer watches is the live one, not the first one in the document.
+    expect(adapter.getTranscriptRoot()!.querySelector('[data-turn-key="a"]')).not.toBeNull();
+  });
+
+  it('reads the live chat when the previous chat is mounted after it', () => {
+    const chat = nextChat();
+    page(chat, root(marked(turn('a'), chat)) + stale());
+    expect(adapter.getAllMessages()).toHaveLength(2);
+  });
+
+  it('ignores a leftover marker that is outside the conversation altogether (a sidebar entry, a preview)', () => {
+    const chat = nextChat();
+    page(chat, `<div id="sidebar">${marker('old-chat')}</div>` + root(marked(turn('a'), chat)));
+    expect(adapter.getAllMessages()).toHaveLength(2);
+  });
+
+  it('keeps one numbering for the chat whether or not the stale tree is there', () => {
+    const chat = nextChat();
+    page(chat, root(marked(turn('a'), chat) + marked(turn('b'), chat)));
+    const alone = adapter.getAllMessages().map((m) => m.id);
+    page(chat, stale() + root(marked(turn('a'), chat) + marked(turn('b'), chat)));
+    expect(adapter.getAllMessages().map((m) => m.id)).toEqual(alone);
+  });
+
+  it('waits while only the previous chat is on screen, then recovers by itself (nothing is latched)', () => {
+    const chat = nextChat();
+    page(chat, stale()); // the URL has changed, the page has not caught up
+    expect(adapter.getAllMessages()).toEqual([]);
+    expect(adapter.getIndexGeneration?.()).toBeNull();
+    expect(adapter.explainBlockedReason!(document.querySelector('[data-dil-message-id] p') as unknown as Node)).toMatch(/which chat/);
+
+    page(chat, root(marked(turn('a'), chat))); // it catches up
+    expect(adapter.getAllMessages()).toHaveLength(2);
+    expect(adapter.getIndexGeneration?.()).not.toBeNull();
+    expect(adapter.explainBlockedReason!(document.querySelector('[data-dil-message-id] p') as unknown as Node)).toBeNull();
+  });
+
+  it('still refuses a single tree that mixes the old chat and the new one (a half-finished render)', () => {
+    const chat = nextChat();
+    page(chat, root(marked(turn('old1'), 'old-chat') + marked(turn('a'), chat)));
+    expect(adapter.getAllMessages()).toEqual([]);
+  });
+
+  it('says why it is waiting, once, with structure only, so a stuck state can be diagnosed', () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    try {
+      const chat = nextChat();
+      page(chat, stale());
+      adapter.getAllMessages();
+      adapter.getAllMessages();
+      adapter.getAllMessages();
+      const mine = info.mock.calls.filter((c) => String(c[0]).includes('waiting'));
+      expect(mine).toHaveLength(1); // not once per call
+      const logged = JSON.stringify(mine);
+      expect(logged).toContain('old-chat'); // which chat the page still shows
+      expect(logged).not.toContain('answer old1'); // never the chat's text
+    } finally {
+      info.mockRestore();
+    }
+  });
+});
+
 describe('chatgptAdapter: ids always satisfy the position contract', () => {
   it('only ever produces decimal-integer ids', () => {
     const chat = nextChat();

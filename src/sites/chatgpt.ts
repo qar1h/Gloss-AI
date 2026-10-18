@@ -72,6 +72,48 @@ function conversationIdFromUrl(): string | null {
   return location.pathname.match(/\/c\/([^/?#]+)/)?.[1] ?? null;
 }
 
+/**
+ * Which conversation tree on the page is the one the URL is showing.
+ *
+ * After a sidebar switch the previous chat's tree can stay mounted (hidden) next to the new one, and
+ * stale markers can sit elsewhere in the page. So the chat marker is judged PER TREE, and only the
+ * tree that belongs to the URL's chat is read; whatever else the page still holds is ignored. (A
+ * version that required every marker in the whole document to agree refused to read for as long as
+ * one leftover element existed, which was until the page was reloaded.) A tree is:
+ *   'yes'     it has markers and all of them are this chat's;
+ *   'no'      one of its markers is another chat's, or it mixes chats (a half-finished render);
+ *   'unknown' it has no markers (a chat with no answer yet).
+ * Nothing here is remembered between calls: it is a pure function of the page as it is now.
+ */
+interface RootChoice {
+  root: Element | null;
+  /** The distinct chat ids found on the page, per tree, for the diagnostic log only. */
+  seen: string[][];
+}
+
+function chooseRoot(conversationId: string): RootChoice {
+  const found = Array.from(document.querySelectorAll(CONVERSATION_ROOT));
+  const candidates: Element[] = found.length > 0 ? found : document.body ? [document.body] : [];
+  const verdict = (root: Element): 'yes' | 'no' | 'unknown' => {
+    const ids = Array.from(root.querySelectorAll<HTMLElement>(DOM_CONVERSATION_ID))
+      .map((el) => el.dataset.chatgptSelectionConversationId)
+      .filter((id): id is string => !!id);
+    if (ids.length === 0) return 'unknown';
+    return ids.every((id) => id === conversationId) ? 'yes' : 'no';
+  };
+  const verdicts = candidates.map((root) => ({ root, verdict: verdict(root) }));
+  const seen = candidates.map((root) =>
+    Array.from(new Set(Array.from(root.querySelectorAll<HTMLElement>(DOM_CONVERSATION_ID)).map((el) => short(el.dataset.chatgptSelectionConversationId ?? '')))),
+  );
+  const yes = verdicts.find((v) => v.verdict === 'yes');
+  if (yes) return { root: yes.root, seen };
+  const unknown = verdicts.filter((v) => v.verdict === 'unknown');
+  if (unknown.length === 1) return { root: unknown[0]!.root, seen };
+  return { root: null, seen };
+}
+
+let waitingLogged = '';
+
 let trackedRoot: Element | null = null;
 let trackerObserver: MutationObserver | null = null;
 let trackerTimer: ReturnType<typeof setTimeout> | null = null;
@@ -82,9 +124,8 @@ let trackerTimer: ReturnType<typeof setTimeout> | null = null;
  * fast scrolling would skip windows and lose overlaps that the live probes (sampling every
  * 150 ms) did see. Throttled, and it never touches the page.
  */
-function track(): void {
+function track(root: Element | null): void {
   if (typeof MutationObserver !== 'function') return;
-  const root = document.querySelector(CONVERSATION_ROOT);
   if (!root || root === trackedRoot) return;
   trackerObserver?.disconnect();
   trackerObserver = new MutationObserver(() => {
@@ -100,21 +141,28 @@ function track(): void {
 
 /** Reads the mounted turns and places them in this chat's frame. Cheap, and idempotent for an unchanged window. */
 function readSnapshot(): Snapshot | null {
-  track();
   const conversationId = conversationIdFromUrl();
   if (!conversationId) return null;
 
   // Mid-navigation the URL and the page can briefly disagree about which chat this is. Feeding
-  // one chat's turns into another's frame would be a well-formed but wrong index, so wait.
-  // Every turn carries it, and a render can be half old, half new: all of them must agree.
-  for (const marked of Array.from(document.querySelectorAll<HTMLElement>(DOM_CONVERSATION_ID))) {
-    const domId = marked.dataset.chatgptSelectionConversationId;
-    if (domId && domId !== conversationId) return null;
+  // one chat's turns into another's frame would be a well-formed but wrong index, so wait: read
+  // only the tree that belongs to the URL's chat (see chooseRoot), and nothing if there is none yet.
+  const choice = chooseRoot(conversationId);
+  track(choice.root);
+  if (!choice.root) {
+    const signature = JSON.stringify([conversationId, choice.seen]);
+    if (signature !== waitingLogged) {
+      // Diagnostic only (never read back to decide anything): which chats the page still shows.
+      waitingLogged = signature;
+      console.info('[highlight-explainer] waiting for the page to show chat ' + short(conversationId) + '; chats still on the page, per tree:', choice.seen);
+    }
+    return null;
   }
+  waitingLogged = '';
 
   // The window handed to the frame stops at the first turn still being written: its key may change
   // when it finishes, and what follows it is not consecutive with anything we trust.
-  const all = Array.from(document.querySelectorAll<HTMLElement>(TURN));
+  const all = Array.from(choice.root.querySelectorAll<HTMLElement>(TURN));
   const writing = all.findIndex(isWriting);
   const mounted = writing === -1 ? all : all.slice(0, writing);
 
@@ -274,7 +322,13 @@ export const chatgptAdapter: SiteAdapter = {
   },
 
   getTranscriptRoot(): HTMLElement | null {
-    return document.querySelector<HTMLElement>(CONVERSATION_ROOT);
+    // The tree the URL is showing, not simply the first one: after a sidebar switch a stale tree can
+    // come first, and an observer on it would miss every change in the live chat. The indexer asks
+    // this every second, which also re-points the adapter's own tracker.
+    const conversationId = conversationIdFromUrl();
+    const root = conversationId ? chooseRoot(conversationId).root : null;
+    track(root);
+    return (root as HTMLElement | null) ?? document.querySelector<HTMLElement>(CONVERSATION_ROOT);
   },
 
   observedAttributes: ['data-talvt-turn-state'],
