@@ -544,3 +544,5 @@ Probe tools used along the way are in the chat history only (the recorders were 
   console.log('summary:', rows.reduce((a, r) => ((a[r.shape] = (a[r.shape] || 0) + 1), a), {}));
 })();
 ```
+
+- **Question-only turns: recorded as an open item, not chased (2026-10-18).** A later run found none in the chat on screen. Harmless if the answer is genuinely absent; thinner context if it is rendered under an attribute we do not know. See the open item in CLAUDE.md, with its trigger. Skip it in the live run unless a popup says "unfamiliar message layout" on a normal-looking answer.
