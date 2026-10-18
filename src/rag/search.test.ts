@@ -52,6 +52,19 @@ describe('cosineSimilarity', () => {
 });
 
 describe('rankChunks', () => {
+describe('rankChunks: vectors that no longer describe the chunk', () => {
+  it('ignores a vector that was computed for different text than the chunk now holds', () => {
+    // A chunk id is `<chat>:<position>:<index>`, so after a re-index or a wipe the same id can
+    // belong to different text. Its old vector must not rank it: it would be matched on text it no longer has.
+    const chunks = [makeChunk('a', { textHash: 'hash-new' }), makeChunk('b', { textHash: 'hash-b' })];
+    const embeddings = [
+      makeEmbedding('a', [1, 0], { chunkTextHash: 'hash-old' }),
+      makeEmbedding('b', [0.5, 0.5], { chunkTextHash: 'hash-b' }),
+    ];
+    expect(rankChunks(chunks, embeddings, [1, 0], 5).map((r) => r.chunk.id)).toEqual(['b']);
+  });
+});
+
   it('ranks chunks by similarity to the query vector, highest first', () => {
     const chunks = [makeChunk('a'), makeChunk('b'), makeChunk('c')];
     const embeddings = [
