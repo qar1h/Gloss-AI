@@ -9,6 +9,16 @@
 // calls `ensure` before they do. A fresh page load has applied nothing, so its first call wipes:
 // the index is per page load on those sites. Sites with no generation (Claude) are never touched.
 
+/**
+ * Whether ids read under `readGeneration` still mean what they meant: the page is still numbered
+ * the same way. Anything built from ids and the stored index (an Explain prompt) re-checks this
+ * after each await, because the numbering can change at any moment and the index is rewritten
+ * under the new one. A site with no generations (null) never changes.
+ */
+export function generationIsCurrent(readGeneration: string | null, currentGeneration: string | null): boolean {
+  return readGeneration === null ? true : readGeneration === currentGeneration;
+}
+
 export interface GenerationGate {
   ensure(conversationId: string, generation: string | null | undefined): Promise<void>;
   /** Called after a chat's rows were wiped (to drop in-memory caches that describe them). */

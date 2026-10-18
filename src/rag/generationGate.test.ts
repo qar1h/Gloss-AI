@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { createGenerationGate } from './generationGate';
+import { createGenerationGate, generationIsCurrent } from './generationGate';
+
+describe('generationIsCurrent', () => {
+  it('is always true for a site with no generations (claude.ai)', () => {
+    expect(generationIsCurrent(null, null)).toBe(true);
+    expect(generationIsCurrent(null, 'g9')).toBe(true);
+  });
+  it('is true only while the page is still numbered the way the ids were read', () => {
+    expect(generationIsCurrent('g1', 'g1')).toBe(true);
+    expect(generationIsCurrent('g1', 'g2')).toBe(false);
+  });
+  it('is false when the page can no longer say which numbering it has (mid-navigation)', () => {
+    expect(generationIsCurrent('g1', null)).toBe(false);
+  });
+});
 
 function makeGate() {
   const wiped: string[] = [];
