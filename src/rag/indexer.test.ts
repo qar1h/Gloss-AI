@@ -96,7 +96,7 @@ vi.mock('./store', () => {
   };
 });
 
-import { runIndexPass } from './indexer';
+import { initIndexer, runIndexPass } from './indexer';
 
 const msg = (id: string, text: string, role: 'user' | 'assistant' = 'assistant'): FakeMessage => ({ id, role, element: { text } });
 const records = (conversationId: string) =>
@@ -168,6 +168,32 @@ describe('runIndexPass: F2 - rows purged by another tab', () => {
     // Without a vector the chunk could never be found by meaning again, and nothing would say so.
     expect(embeddings('purged~1')).toHaveLength(1);
     expect(h.embedCalls).toHaveLength(2);
+  });
+});
+
+describe('the console helpers (F6)', () => {
+  it('wipe rows written under an older numbering before they read, like every other reader', async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.window = globalThis;
+    g.MutationObserver = class {
+      observe() {}
+      disconnect() {}
+    };
+    h.adapterState.conversationId = 'debug~1';
+    h.adapterState.generation = 'g1';
+    h.adapterState.messages = [msg('10', 'Written while the page was numbered g1.')];
+    await runIndexPass();
+    expect(records('debug~1')).toHaveLength(1);
+
+    h.adapterState.generation = 'g2'; // the chat was renumbered; the g1 rows no longer mean anything
+    h.adapterState.messages = [];
+    const stop = initIndexer();
+    try {
+      await (g.__glossDumpChunks as () => Promise<void>)();
+    } finally {
+      stop();
+    }
+    expect(records('debug~1')).toEqual([]);
   });
 });
 

@@ -214,6 +214,74 @@ describe('assistantBlocks: shapes the fixtures do not contain', () => {
   });
 });
 
+describe('assistantBlocks: nothing dropped or glued (F3)', () => {
+  it('keeps a code block that sits inside a blockquote', () => {
+    const blocks = assistantBlocks(frag('<blockquote><p>See:</p><pre>rm -rf build</pre></blockquote>'));
+    expect(blocks).toEqual([
+      { type: 'blockquote', text: 'See:' },
+      { type: 'code', text: 'rm -rf build' },
+    ]);
+  });
+
+  it('keeps a list inside a blockquote as list items, without gluing the items together', () => {
+    const blocks = assistantBlocks(frag('<blockquote><ul><li>one</li><li>two</li></ul></blockquote>'));
+    expect(blocks).toEqual([
+      { type: 'list-item', text: 'one' },
+      { type: 'list-item', text: 'two' },
+    ]);
+  });
+
+  it('keeps text that sits directly beside block children', () => {
+    expect(assistantBlocks(frag('Intro words here <p>para</p>'))).toEqual([
+      { type: 'paragraph', text: 'Intro words here' },
+      { type: 'paragraph', text: 'para' },
+    ]);
+    expect(assistantBlocks(frag('<div data-d-component="box">lead text<div>line two</div> trailing <b>bold</b> words</div>'))).toEqual([
+      { type: 'paragraph', text: 'lead text' },
+      { type: 'paragraph', text: 'line two' },
+      { type: 'paragraph', text: 'trailing bold words' },
+    ]);
+  });
+
+  it('keeps a formula that sits directly beside block children', () => {
+    const katex = '<span class="katex"><span class="katex-mathml"><math><annotation encoding="application/x-tex">x^2</annotation></math></span><span class="katex-html" aria-hidden="true">xx</span></span>';
+    expect(assistantBlocks(frag(`Let ${katex} be <p>para</p>`))[0]).toEqual({ type: 'paragraph', text: 'Let $x^2$ be' });
+  });
+
+  it('puts a space where block-level children meet, so words are not glued', () => {
+    const blocks = assistantBlocks(frag('<ul><li>intro<ul><li>inner</li></ul>outro</li></ul>'));
+    expect(blocks).toEqual([
+      { type: 'list-item', text: 'intro outro' },
+      { type: 'list-item', text: 'inner' },
+    ]);
+    expect(assistantBlocks(frag('<p>one<br>two</p>'))).toEqual([{ type: 'paragraph', text: 'one two' }]);
+    expect(assistantBlocks(frag('<div><div>alpha</div><div>beta</div></div>')).map((b) => b.text)).toEqual(['alpha', 'beta']);
+  });
+
+  it('reads a table nested in a cell once, as its own rows', () => {
+    const blocks = assistantBlocks(frag('<table><tr><td>a<table><tr><td>inner</td></tr></table></td><td>b</td></tr></table>'));
+    expect(blocks).toEqual([
+      { type: 'list-item', text: 'a | b' },
+      { type: 'list-item', text: 'inner' },
+    ]);
+  });
+
+  it('gives the same blocks when the whitespace between block tags is missing, as in a minified live page', () => {
+    const html = readFileSync(resolve(__dirname, '../../fixtures/chatgpt-conversation.html'), 'utf8');
+    const blockTag = '(?:p|div|li|ul|ol|h[1-6]|table|thead|tbody|tr|td|th|pre|blockquote)';
+    const stripped = html
+      .replace(new RegExp(`>\\s+<(?=/?${blockTag}\\b)`, 'g'), '><')
+      .replace(new RegExp(`(</${blockTag}>)\\s+<`, 'g'), '$1<');
+    expect(stripped.length).toBeLessThan(html.length); // it really did strip something
+    const read = (source: string) =>
+      Array.from(parse(source).querySelectorAll('[data-dil-message-id]')).map((root) => assistantBlocks(root));
+    const pretty = read(html);
+    const minified = read(stripped);
+    expect(minified).toHaveLength(3);
+    expect(minified).toEqual(pretty);
+  });
+});
+
 describe('userBlocks: shapes the fixtures do not contain', () => {
   const bubble = (inner: string) => frag(`<div data-user-message-bubble="true"><div class="whitespace-pre-wrap">${inner}</div></div>`).firstElementChild!;
 

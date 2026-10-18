@@ -56,7 +56,9 @@ async function dryRun(textOrOptions?: string | PromptDebugOptions, maybeOptions?
       .getAllMessages()
       .find((m) => requireAdapter().getMessageText(m.element).includes(text));
     if (!message) {
-      console.warn(`${TAG} no message currently on the page contains that text.`);
+      console.warn(
+        `${TAG} no indexed message currently on the page contains that text. (On ChatGPT, a window you jumped to with the scrollbar is not indexed: select the text with the mouse instead of typing it.)`,
+      );
       return;
     }
     raw = rawFocalForMessage(message, text, text);

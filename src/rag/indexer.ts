@@ -517,8 +517,18 @@ export function initIndexer(): () => void {
     attachToFeed(); // also covers the feed element itself being remounted
   }, NAVIGATION_POLL_MS);
 
+  // The console helpers read the index too, so they go through the same gate as everything else:
+  // between a renumbering and the next pass they would otherwise print rows from the old numbering.
+  const readableConversation = async (): Promise<string | null> => {
+    const adapter = requireAdapter();
+    const id = adapter.getConversationId();
+    if (!id) return null;
+    await ensureIndexGeneration(id, adapter.getIndexGeneration?.() ?? null);
+    return id;
+  };
+
   (window as unknown as { __glossDumpChunks?: () => Promise<void> }).__glossDumpChunks = async () => {
-    const id = requireAdapter().getConversationId();
+    const id = await readableConversation();
     if (id) await dumpChunks(id);
   };
 
@@ -526,7 +536,7 @@ export function initIndexer(): () => void {
     text: string,
     k?: number,
   ) => {
-    const id = requireAdapter().getConversationId();
+    const id = await readableConversation();
     if (!id) return;
     const settings: Settings = await getSettings();
     await dumpSearch(id, text, k ?? settings.retrievalK);
@@ -534,14 +544,14 @@ export function initIndexer(): () => void {
 
   (window as unknown as { __glossHybrid?: (text?: string, k?: number, depth?: number) => Promise<void> }).__glossHybrid =
     async (text?: string, k?: number, depth?: number) => {
-      const id = requireAdapter().getConversationId();
+      const id = await readableConversation();
       if (!id) return;
       await dumpHybrid(id, text, k, depth);
     };
 
   (window as unknown as { __glossResetFailedEmbeddings?: () => Promise<void> }).__glossResetFailedEmbeddings =
     async () => {
-      const id = requireAdapter().getConversationId();
+      const id = await readableConversation();
       if (!id) return;
       const count = await resetFailedEmbeddings(id);
       console.log(`[highlight-explainer] cleared ${count} failed embedding(s) — re-indexing now.`);
