@@ -420,6 +420,29 @@ describe('chatgptAdapter.explainBlockedReason: a selection the adapter cannot re
     expect(logged).not.toContain('picture caption'); // never the chat's text
   });
 
+  it('logs the chain of elements from the selection up to the turn, as tags and attribute names, so a new layout can be learned from one click', () => {
+    show(nextChat(), [
+      turn('q', {
+        assistant: null,
+        extra: '<section data-message-author-role="assistant" data-legacy-wrapper="1" class="markdown prose"><h2 id="h">INVEST heading text</h2></section>',
+      }),
+    ]);
+    expect(reason(q('#h'))).toMatch(/unfamiliar message layout/);
+    const logged = JSON.stringify(info.mock.calls);
+    expect(logged).toContain('selectedPath');
+    expect(logged).toContain('h2'); // the element the selection is in
+    expect(logged).toContain('section[data-legacy-wrapper data-message-author-role=assistant'); // names, plus enum-like values
+    expect(logged).not.toContain('INVEST heading text'); // never the chat's text
+  });
+
+  it('does not tell the user that an ordinary-looking answer is not a normal answer', () => {
+    show(nextChat(), [turn('q', { assistant: null, extra: '<div data-some-new-renderer="1"><p id="x">words</p></div>' })]);
+    const why = reason(q('#x'))!;
+    expect(why).toMatch(/unfamiliar message layout/);
+    expect(why).not.toMatch(/not a normal question or answer/);
+    expect(why).toMatch(/may be an answer/);
+  });
+
   it('says so for a turn with more than one answer body, which it will not guess between', () => {
     show(nextChat(), [turn('b', { assistantRenderers: 2 })]);
     expect(reason(q('[data-dil-message-id] p'))).toMatch(/more than one answer/);

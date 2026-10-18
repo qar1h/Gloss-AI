@@ -226,6 +226,35 @@ function generationOf(snapshot: Snapshot): string {
   return `${LOADED}:${snapshot.conversationId}:${snapshot.sequence.generation}`;
 }
 
+/** Attributes whose VALUE is an identifier, not chat text, so it may be logged. */
+const SAFE_VALUES = new Set([
+  'role',
+  'data-testid',
+  'data-message-author-role',
+  'data-d-component',
+  'data-conversation-role',
+  'data-markdown-text-style',
+  'data-talvt-turn-state',
+]);
+
+/**
+ * The chain of elements from where a selection starts up to its turn, innermost first, as tags and
+ * attribute names (with the value only for identifier-like attributes). Never text. It is what a new
+ * layout needs to be taught from a single click.
+ */
+function pathFrom(start: Element | null, turn: Element): string[] {
+  const path: string[] = [];
+  for (let el: Element | null = start; el && path.length < 16; el = el.parentElement) {
+    const attrs = Array.from(el.attributes)
+      .filter((a) => a.name.startsWith('data-') || a.name === 'role')
+      .map((a) => (SAFE_VALUES.has(a.name) && a.value.length <= 40 ? `${a.name}=${a.value}` : a.name))
+      .sort();
+    path.push(el.tagName.toLowerCase() + (attrs.length > 0 ? `[${attrs.join(' ')}]` : ''));
+    if (el === turn) break;
+  }
+  return path;
+}
+
 function short(key: string): string {
   return key.length > 12 ? `${key.slice(0, 8)}…` : key;
 }
@@ -408,7 +437,7 @@ export const chatgptAdapter: SiteAdapter = {
     if (isWriting(turnEl)) why = 'This message is still being written. Try again when it has finished.';
     else if (!view) why = "The messages above this one are still being written, so it can't be placed yet. Try again when they have finished.";
     else if (!view.recognized) why = "I can't read this message: it has more than one answer body, a layout I don't understand yet.";
-    else why = "I can't read this part of the chat (an unfamiliar message layout). It is not a normal question or answer.";
+    else why = "I can't read this part of the chat (an unfamiliar message layout). It may be an answer in a layout I haven't seen yet.";
 
     // Structure only, never text: enough to capture the layout as a fixture and teach the adapter.
     const bubble = turnEl.querySelector(USER);
@@ -422,6 +451,7 @@ export const chatgptAdapter: SiteAdapter = {
       questions: turnEl.querySelectorAll(USER).length,
       answers: turnEl.querySelectorAll(ASSISTANT).length,
       attributesOutsideTheQuestion: Array.from(names).sort(),
+      selectedPath: pathFrom(start, turnEl),
     });
     return why;
   },
