@@ -448,20 +448,51 @@ Probe round 3 (full sweep + fast drag, with a recorder that sampled 1047 and 101
 - Fast scrollbar drag, then highlight: the explanation still works, the popup says the part is not connected and only nearby messages were used.
 - Read a real `__glossPrompt()` report on ChatGPT: the message numbers are arbitrary but the question is the same turn's user message and the recent ones are the turns just above.
 
-### Live checklist for the built scheme B (2026-10-17) — the real v8 sign-off
+### Live checklist for the built scheme B (revised 2026-10-18, after the independent review)
 
-Build, refresh the extension, **reload the chatgpt.com tab** (stale content script), turn the debug toggle on. Then, in a ChatGPT chat of 15+ turns:
+Build, refresh the extension, **reload the chatgpt.com tab** (stale content script), turn the debug toggle on, open DevTools and filter the console by `highlight-explainer`. **For the whole session, any line saying the order of the ChatGPT chat changed, or any "chat changed" note in a popup, that you did not cause by editing, is a finding: stop and tell me.**
 
-1. **Nothing broke on claude.ai:** Explain, `__glossSearch`, `__glossHybrid`, `__glossPrompt` as in v5.
-2. **Indexing:** scroll slowly down the chat. `__glossDumpChunks()` shows chunks for what you scrolled through; code blocks whole; formulas once as `$...$`; tables as `a | b | c` rows. **Check a Python block: is the indentation there?** (The fixtures cannot say.)
-3. **Explain, ordinary case:** highlight inside an answer. Read the `__glossPrompt()` report, not just the text: the question is the user message of the same turn, the recent messages are the turns just above, the excerpts are in chat order, message numbers are arbitrary but consistent.
-4. **Send a message** and let the answer finish: no "chat changed" note appears, no index wipe in the debug log. (If one does, the turn key changes when the answer finishes, and the frame logic needs the temp-key case handled.)
-5. **Switch chats from the sidebar without reloading**, then Explain: the ids and the index belong to the chat you are in.
-6. **Fast scrollbar drag, then highlight:** the explanation works; the popup says this part is not connected and only nearby messages were used; the report shows retrieval disabled. Scroll step by step back to where you were: it connects (no note).
-7. **Edit an early message** (or regenerate the last one): after an edit the next explanation shows the "chat changed" note and the index restarts from the screen; a plain regenerate replaces the old answer's chunks and shows no note.
-8. **Two tabs of the same chat:** scroll in both; each explains correctly, and neither mixes in the other's chunks.
-9. **Typing and streaming:** no lag while an answer streams; the page does not feel slower while scrolling.
-10. **ChatGPT's own selection overlay** and our Explain button do not hide each other; the popup closes on Escape and outside click.
-11. A user-only turn, an attachment-only question, a table answer, a formula highlight: each explains sensibly, or says why not.
+Part A: the five things the reviewer could not establish from code. In this order, because a "no" to the first makes every later result suspect.
+
+1. **Does a turn's key change after its answer finishes?** Send a message in a chat with 5+ turns. Wait for the answer to finish, then 15 more seconds. Expect: no "order changed" warning, no "chat changed" note in the popup, and the generation unchanged. If you get a conflict on every message you send, the key changes at completion (the frame logic needs the temporary-key case handled).
+2. **Is there ever a mounted turn that is not next to the others (a pinned last turn, a sticky element)?** The recorder sweeps found none, but not while sending. After step 1, scroll up and down while the composer is focused. Expect no conflict. A conflict while merely scrolling means a non-adjacent turn is being mounted.
+3. **Does ChatGPT recycle DOM elements for other turns?** Paste this, scroll the whole chat a few times (slowly and with the scrollbar), then run `__reuse.stop()`. `reused: 0` means elements are never handed to another turn (the F5 guard is then insurance only). Any other number: report it.
+   ```js
+   (() => {
+     const seen = new WeakMap(); let samples = 0, reused = 0;
+     const keyOf = (el) => (el.matches('[data-turn-key]') ? el : el.closest('[data-turn-key]'))?.dataset.turnKey;
+     const tick = () => {
+       samples++;
+       document.querySelectorAll('[data-turn-key],[data-user-message-bubble],[data-dil-message-id]').forEach((el) => {
+         const key = keyOf(el); const prev = seen.get(el);
+         if (prev && key && prev !== key) reused++;
+         if (key) seen.set(el, key);
+       });
+     };
+     const timer = setInterval(tick, 200); tick();
+     window.__reuse = { stop() { clearInterval(timer); console.log({ samples, reused }); } };
+   })();
+   ```
+4. **How common are turns with more than one answer body (thinking, search, tools)?** In a chat that used them, run the line below and count turns where `answers` is not 1. Also note whether Explain works in those turns (it opens nothing in a turn with two bodies; the debug log lists them).
+   ```js
+   [...document.querySelectorAll('[data-turn-key]')].map((t) => ({ users: t.querySelectorAll('[data-user-message-bubble]').length, answers: t.querySelectorAll('[data-dil-message-id]').length }))
+   ```
+5. **Does CodeMirror only render the lines near its viewport?** Ask ChatGPT for a 300-line script. Run the line below, scroll inside the code block, run it again. If the line count changes as you scroll, long code is only partly in the DOM and its chunk would be truncated.
+   ```js
+   [...document.querySelectorAll('[data-code-block]')].map((b) => ({ cmLines: b.querySelectorAll('.cm-line').length, pre: b.querySelectorAll('pre').length }))
+   ```
+
+Part B: the normal flows.
+
+6. **claude.ai is unchanged:** reload a claude.ai tab; Explain, `__glossSearch`, `__glossHybrid`, `__glossPrompt` behave as in v5.
+7. **Indexing and code:** scroll slowly down a ChatGPT chat. `__glossDumpChunks()` shows chunks for what you scrolled through; code blocks whole; formulas once as `$...$`; tables as `a | b | c` rows. **Check a Python block: is the indentation there?**
+8. **Explain, ordinary case:** highlight inside an answer. Read the `__glossPrompt()` report, not just the text: the question is the user message of the same turn, the recent messages are the turns just above, the excerpts are in chat order, the message numbers are arbitrary but consistent.
+9. **Switch chats from the sidebar without reloading**, then Explain: the ids and the index belong to the chat you are in (try A, B, then back to A).
+10. **Fast scrollbar drag, then highlight:** the explanation works; the popup says this part is not connected and only nearby messages were used; the report shows retrieval disabled. Scroll step by step back to where you were: it connects and the note goes away.
+11. **Edit an early message, and separately regenerate the last answer:** after an edit the next explanation shows the "chat changed" note and the index restarts from the screen; a plain regenerate replaces the old answer's chunks and shows no note.
+12. **Two tabs of the same chat** (the case that caused F2): scroll in both, then in the FIRST tab run `__glossHybrid("some term")`. It must still show embedding ranks for chunks (not only BM25) once that tab has re-indexed what it shows. Each tab explains correctly and neither shows the other's chunks.
+13. **Typing and streaming:** no lag while an answer streams; scrolling does not feel slower.
+14. **ChatGPT's own selection overlay** and our Explain button do not hide each other; the popup closes on Escape and outside click.
+15. A user-only turn, an attachment-only question, a table answer and a formula highlight each explain sensibly, or say why not.
 
 Probe tools used along the way are in the chat history only (the recorders were throwaway and are not in the repo).
