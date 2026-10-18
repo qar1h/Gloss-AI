@@ -53,6 +53,14 @@ describe('summaryLines', () => {
     expect(lines).toContain('12, 11, 10');
   });
 
+  it('does not show the retrieval cap as a limit in full-chat mode, where everything is sent', () => {
+    const lines = summaryLines(makeReport({ mode: 'full', modeReason: 'the whole indexed chat fits', excerptCount: 10, maxChunks: 8 })).join('\n');
+    expect(lines).not.toContain('of max'); // "10 of max 8" read like a bug; the cap only applies to retrieval
+    expect(lines).toContain('excerpts 10');
+    expect(lines).toContain('full-chat mode');
+    expect(lines).toContain('applies to retrieval only');
+  });
+
   it('says which recent messages were too big to always include and were left to retrieval', () => {
     const lines = summaryLines(makeReport({ demotedRecent: [{ id: '255', estTokens: 1670 }] })).join('\n');
     expect(lines).toContain('255');
