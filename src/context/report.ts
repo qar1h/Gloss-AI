@@ -1,6 +1,15 @@
 // Turns a PromptReport into the lines and tables the console and popup show. Pure.
 
+import { MAX_SIMPLICITY_LEVEL, SIMPLICITY_LEVELS } from './levels';
 import type { Coverage, PromptReport } from './types';
+
+function levelLine(report: PromptReport): string {
+  const level = report.simplicityLevel;
+  const head = `simplicity level: ${level} of ${MAX_SIMPLICITY_LEVEL} (${SIMPLICITY_LEVELS[level]?.label ?? 'unknown'})`;
+  if (level === 0) return head;
+  const extra = report.levelExtraTokens;
+  return `${head} — instruction ≈${extra >= 0 ? '+' : ''}${extra} est. tokens vs level 0; excerpts are the level-0 selection, the budget is not re-applied`;
+}
 
 export function summaryLines(report: PromptReport): string[] {
   const lines: string[] = [
@@ -10,6 +19,7 @@ export function summaryLines(report: PromptReport): string[] {
         ? `excerpts ${report.excerptCount} (full-chat mode sends all of them; the max of ${report.maxChunks} applies to retrieval only)`
         : `excerpts ${report.excerptCount} of max ${report.maxChunks}`
     }`,
+    levelLine(report),
   ];
   if (report.excludedMessageIds.length > 0) {
     lines.push(
