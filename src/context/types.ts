@@ -106,6 +106,12 @@ export interface SectionSize {
   estTokens: number;
 }
 
+/** One named piece of the prompt, in order. The last one is always `task`, the instruction. */
+export interface Section {
+  name: string;
+  text: string;
+}
+
 export interface PromptReport {
   mode: Mode;
   modeReason: string;
@@ -132,11 +138,17 @@ export interface PromptReport {
   recentShortfall: { wanted: number; found: number } | null;
   /** A site-supplied caveat (see OrderStatus: message order, or content only partly on the page), shown first in the popup. */
   orderNote: string | null;
+  /** Which "Simpler" level this prompt is for; 0 = the original instruction (see levels.ts). */
+  simplicityLevel: number;
+  /** Est. tokens this prompt has over its level-0 version (the instruction is longer); 0 at level 0. */
+  levelExtraTokens: number;
 }
 
 export interface AssembledPrompt {
   prompt: string;
   report: PromptReport;
+  /** The prompt's pieces, so a "Simpler" press can swap the instruction and keep everything else. */
+  sections: Section[];
 }
 
 /** How much of the chat the index covers. */

@@ -37,6 +37,8 @@ function makeReport(overrides: Partial<PromptReport> = {}): PromptReport {
     questionState: 'found',
     recentShortfall: null,
     orderNote: null,
+    simplicityLevel: 0,
+    levelExtraTokens: 0,
     ...overrides,
   };
 }
@@ -66,6 +68,13 @@ describe('summaryLines', () => {
     expect(lines).toContain('255');
     expect(lines).toContain('1670');
     expect(lines).toContain('retrieval');
+  });
+
+  it('names the level in the summary', () => {
+    expect(summaryLines(makeReport())).toContain('simplicity level: 0 of 3 (Explain)');
+    expect(summaryLines(makeReport({ simplicityLevel: 2, levelExtraTokens: 41 }))).toContain(
+      'simplicity level: 2 of 3 (Explain · even simpler) — instruction ≈+41 est. tokens vs level 0; excerpts are the level-0 selection, the budget is not re-applied',
+    );
   });
 
   it('prints warnings and the retrieval note loudly', () => {

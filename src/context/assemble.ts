@@ -265,7 +265,9 @@ export function assemblePrompt(input: AssemblyInput, opts: AssemblyOptions): Ass
     questionState,
     recentShortfall: focal.recentShortfall,
     orderNote: focal.orderStatus.note,
+    simplicityLevel: 0,
+    levelExtraTokens: 0,
   };
 
-  return { prompt, report };
+  return { prompt, report, sections };
 }
