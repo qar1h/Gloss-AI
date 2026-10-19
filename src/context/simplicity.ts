@@ -41,6 +41,8 @@ export function promptAtLevel(base: AssembledPrompt, level: number): AssembledPr
     report: {
       ...base.report,
       totalEstTokens,
+      // The instruction is part of the always-include material, so its extra length counts there too.
+      fixedEstTokens: base.report.fixedEstTokens + extra,
       sections: sections.map((s) => ({ name: s.name, estTokens: estimateTokens(s.text) })),
       warnings,
       simplicityLevel: level,

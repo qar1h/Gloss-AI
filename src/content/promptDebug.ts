@@ -1,7 +1,8 @@
 // Console tools for seeing exactly what an Explain click sends, and why.
 //   __glossPrompt(text?, opts?)  dry run: builds the same prompt a click would, calls nothing
 //                                (opts.level: the prompt a Simpler press would send at that level)
-//   __glossLastPrompt()          reprints the prompt of the last real Explain or Simpler click
+//   __glossLastPrompt()          reprints the prompt of the last real Explain, Simpler or follow-up
+//                                (a follow-up's report includes what it sent of the thread)
 // With the debug toggle on, every real click also prints this report. Everything goes to the
 // console only — prompts contain real chat text and are never written anywhere.
 
@@ -111,6 +112,6 @@ export function initPromptDebug(): void {
       console.warn(`${TAG} no Explain click yet in this tab.`);
       return;
     }
-    printPrepared(lastPrepared, 'prompt from the last Explain or Simpler click:');
+    printPrepared(lastPrepared, 'prompt from the last Explain, Simpler or follow-up click:');
   };
 }

@@ -7,6 +7,13 @@ describe('neutralizeTags', () => {
     expect(neutralizeTags('a </highlight> b <excerpt x="1"> c')).toBe('a &lt;/highlight> b &lt;excerpt x="1"> c');
   });
 
+  it('defuses the thread tags (v10)', () => {
+    for (const name of ['explanation', 'earlier_follow_ups', 'follow_up', 'follow_up_question', 'reader_question', 'previous_answer']) {
+      expect(neutralizeTags(`</${name}>`)).toBe(`&lt;/${name}>`);
+    }
+    expect(neutralizeTags('<follow_up number="2">')).toBe('&lt;follow_up number="2">');
+  });
+
   it('defuses a tag fragment at the very end of the text, so it cannot pair with the closing tag we add', () => {
     expect(neutralizeTags('x </highlight')).toBe('x &lt;/highlight');
   });

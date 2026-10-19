@@ -1,7 +1,7 @@
 // Turns a PromptReport into the lines and tables the console and popup show. Pure.
 
 import { MAX_SIMPLICITY_LEVEL, SIMPLICITY_LEVELS } from './levels';
-import type { Coverage, PromptReport } from './types';
+import type { Coverage, PromptReport, ThreadReport } from './types';
 
 function levelLine(report: PromptReport): string {
   const level = report.simplicityLevel;
@@ -11,6 +11,21 @@ function levelLine(report: PromptReport): string {
   return `${head} — instruction ≈${extra >= 0 ? '+' : ''}${extra} est. tokens vs level 0; excerpts are the level-0 selection, the budget is not re-applied`;
 }
 
+/** What a follow-up carried of the thread (v10); nothing for Explain or Simpler on the explanation. */
+function threadLines(report: PromptReport): string[] {
+  const t = report.thread;
+  if (!t) return [];
+  const earlier = t.includedExchanges.length > 0 ? `earlier follow-ups ${t.includedExchanges.join(', ')}` : 'no earlier follow-ups';
+  const lines = [
+    `thread: follow-up ${t.followUpNumber}; ≈${t.usedEstTokens} of ${t.budgetTokens} thread-budget est. tokens used (explanation ≈${t.explanationEstTokens}; ${earlier}); new question ≈${t.questionEstTokens}`,
+  ];
+  if (t.droppedExchanges.length > 0) {
+    const list = t.droppedExchanges.map((d) => `follow-up ${d.number} (≈${d.estTokens})`).join(', ');
+    lines.push(`left out of the thread to fit its budget (oldest first): ${list}`);
+  }
+  return lines;
+}
+
 export function summaryLines(report: PromptReport): string[] {
   const lines: string[] = [
     `mode: ${report.mode} — ${report.modeReason}`,
@@ -18,8 +33,9 @@ export function summaryLines(report: PromptReport): string[] {
       report.mode === 'full'
         ? `excerpts ${report.excerptCount} (full-chat mode sends all of them; the max of ${report.maxChunks} applies to retrieval only)`
         : `excerpts ${report.excerptCount} of max ${report.maxChunks}`
-    }`,
+    }${report.thread ? `; the thread is on top of this budget (it has its own: ${report.thread.budgetTokens})` : ''}`,
     levelLine(report),
+    ...threadLines(report),
   ];
   if (report.excludedMessageIds.length > 0) {
     lines.push(
@@ -95,6 +111,19 @@ export function describeCoveragePopup(report: PromptReport, coverage: Coverage):
 
   const text = parts.join(' · ');
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * The popup's note for the answer at the bottom of the thread (v10): the click-time note, plus how
+ * many earlier follow-ups that answer's prompt left out to fit the thread budget (the same count as
+ * the report's `left out of the thread` line). Unchanged when nothing was left out, so Explain and
+ * Simpler on the explanation keep the click-time note exactly.
+ */
+export function describeThreadPopup(clickNote: string, thread: ThreadReport | null): string {
+  const dropped = thread?.droppedExchanges.length ?? 0;
+  if (dropped === 0) return clickNote;
+  const part = `${dropped} earlier follow-up${dropped === 1 ? '' : 's'} left out to fit the thread budget`;
+  return clickNote ? `${clickNote} · ${part}` : part.charAt(0).toUpperCase() + part.slice(1);
 }
 
 /** The v3/v4 console wording, unchanged. */
