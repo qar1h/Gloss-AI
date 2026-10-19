@@ -1,6 +1,7 @@
 // Console tools for seeing exactly what an Explain click sends, and why.
 //   __glossPrompt(text?, opts?)  dry run: builds the same prompt a click would, calls nothing
-//   __glossLastPrompt()          reprints the prompt of the last real click
+//                                (opts.level: the prompt a Simpler press would send at that level)
+//   __glossLastPrompt()          reprints the prompt of the last real Explain or Simpler click
 // With the debug toggle on, every real click also prints this report. Everything goes to the
 // console only — prompts contain real chat text and are never written anywhere.
 
@@ -8,7 +9,9 @@ import { requireAdapter } from '@/sites';
 import { getSettings } from '@/options/storage';
 import { finalizeFocal } from '@/context/focal';
 import { prepareExplainPrompt, type DebugOverride, type PreparedExplain } from '@/context/gather';
+import { MAX_SIMPLICITY_LEVEL } from '@/context/levels';
 import { resolveRecentCount } from '@/context/limits';
+import { promptAtLevel } from '@/context/simplicity';
 import { candidateTable, describeCoverageForConsole, sectionTable, summaryLines } from '@/context/report';
 import type { RawFocal } from '@/context/types';
 import { rawFocalForMessage, readRawFocal, whyNotExplainable } from './readFocal';
@@ -22,6 +25,8 @@ export interface PromptDebugOptions {
   budget?: number;
   threshold?: number;
   k?: number;
+  /** The "Simpler" level to show (0 = the normal instruction). */
+  level?: number;
 }
 
 let lastPrepared: PreparedExplain | null = null;
@@ -47,6 +52,11 @@ export function printPrepared(prepared: PreparedExplain, label: string): void {
 async function dryRun(textOrOptions?: string | PromptDebugOptions, maybeOptions?: PromptDebugOptions): Promise<void> {
   const text = typeof textOrOptions === 'string' ? textOrOptions : undefined;
   const options = (typeof textOrOptions === 'object' ? textOrOptions : maybeOptions) ?? {};
+  const level = options.level ?? 0;
+  if (!Number.isInteger(level) || level < 0 || level > MAX_SIMPLICITY_LEVEL) {
+    console.warn(`${TAG} level must be a whole number from 0 to ${MAX_SIMPLICITY_LEVEL}`);
+    return;
+  }
 
   let raw: RawFocal | null;
   const selection = window.getSelection();
@@ -82,7 +92,12 @@ async function dryRun(textOrOptions?: string | PromptDebugOptions, maybeOptions?
     maxChunks: options.k,
   };
   const prepared = await prepareExplainPrompt(requireAdapter().getConversationId(), focal, settings, override);
-  printPrepared(prepared, 'dry run — this is what an Explain click would send (nothing was sent):');
+  printPrepared(
+    { ...prepared, assembled: promptAtLevel(prepared.assembled, level) },
+    level === 0
+      ? 'dry run — this is what an Explain click would send (nothing was sent):'
+      : `dry run — this is what Simpler at level ${level} would send (nothing was sent):`,
+  );
 }
 
 export function initPromptDebug(): void {
@@ -96,6 +111,6 @@ export function initPromptDebug(): void {
       console.warn(`${TAG} no Explain click yet in this tab.`);
       return;
     }
-    printPrepared(lastPrepared, 'prompt from the last Explain click:');
+    printPrepared(lastPrepared, 'prompt from the last Explain or Simpler click:');
   };
 }
