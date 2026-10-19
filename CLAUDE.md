@@ -243,7 +243,7 @@ I chose to add features before v6. The versions below (v7–v13) are built **one
 
 ## Current status
 
-- **Current version:** v9 ("Simpler" button in the popup), **not started**. v8 is complete on branch `v8-chatgpt` (not yet merged to main). 381 unit tests pass.
+- **Current version:** v9 ("Simpler" button in the popup), **not started**. v8 is complete and merged to main (`dc53df4`). 381 unit tests pass.
 - **Completed versions:** v1, v2, v3, v4, v5, v7, v8 (v6 is deferred, not done)
 - **Remaining order:** v9, v10, v11, v12, v13, then v6 (deferred; see "Plan change")
 - **Notes:**
