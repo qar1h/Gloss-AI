@@ -5,7 +5,7 @@
 // from the page or the index, and the popup's context note is left as it is.
 
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
-import { onSelectionChange, type SelectionInfo } from './ui/selection';
+import { isInsideHosts, onSelectionChange, type SelectionInfo } from './ui/selection';
 import { createExplainButton } from './ui/explainButton';
 import { createPopup } from './ui/popup';
 import { readRawFocal, whyNotExplainable } from './readFocal';
@@ -47,17 +47,23 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
   const popup = await createPopup(ctx);
 
   let lastSelection: SelectionInfo | null = null;
+  // Our own popup and button: a selection touching them never brings up Explain.
+  const ownHosts = (): HTMLElement[] =>
+    [popup.hostElement(), button.hostElement()].filter((host): host is HTMLElement => host !== null);
 
   onSelectionChange((info) => {
     lastSelection = info;
     if (info) button.show(info.rect);
     else button.hide();
-  });
+  }, ownHosts);
 
   async function handleExplainClick(): Promise<void> {
     const selection = lastSelection;
     if (!selection) return;
     button.hide();
+    // Belt and braces: the selection may have changed between showing the button and this click.
+    const { startContainer, endContainer } = selection.range;
+    if (isInsideHosts(startContainer, ownHosts()) || isInsideHosts(endContainer, ownHosts())) return;
 
     // Read the page first and synchronously, while the selection is still live.
     const raw = readRawFocal(selection.range, selection.text);

@@ -439,7 +439,23 @@ Then update CLAUDE.md "Current status" (v10 notes: what was built, decisions, th
 
 ## Task 2 probe results
 
-(Filled in by Task 2, Step 1.)
+Probed 2026-10-19 with Playwright, Chrome 155.0 (Windows), on a hand-built page with WXT's real shape: a custom-element host appended as the last child of `<body>`, open shadow root (`@webext-core/isolated-element`, which WXT uses, creates exactly that). Values are from `window.getSelection()` at the last `selectionchange` of each action.
+
+| Action | Reported selection | Explain button before v10? |
+|---|---|---|
+| (a) mouse-drag over popup text | **collapsed**, anchor = focus = `<body>` (the host's parent), rect 0×0; `toString()` still returns the popup text | no: `isCollapsed` → null |
+| (b) double-click a word in popup text | collapsed at `<body>`, empty text | no |
+| (c) select text in the textarea | collapsed at `<body>` | no |
+| (d) **drag from page text into the popup** | **not collapsed**; anchor = the page text node, **focus = the host element**; text = page text from the drag start to the end of `<body>`; rect 432×17 | **yes** |
+| (e) APIs | `Selection.prototype.getComposedRanges` and `shadowRoot.getSelection` both exist; `shadowRoot.getSelection()` reports the inner selection (not collapsed, the popup text) | – |
+| (f) drag from popup text out into the page | collapsed at `<body>` | no |
+
+**What it means:**
+- A selection made inside the popup cannot bring up Explain today (the document-level selection is collapsed). Risk 2 as first stated does not occur in Chrome 155.
+- **But (d) does.** On a real chat the host is the last child of `<body>`, so a drag that starts in a message and ends on the popup selects everything from the drag start to the end of the page. Explain then appears, and a click would close the popup (and in v10 its thread) to explain that huge selection. v10 makes this more likely, because sticky close lets a drag start on the page while a thread is open.
+- **Task 2: Ruling:** the decision rule said to stop on "a range that starts in the page and ends in the popup". I continued, because the planned guard already lists "the host itself → inside" as a case, which is exactly how (d) ends. The guard's design did not change; (d)'s shape became a test (`a drag from the page into the popup (focus = host) is ignored`). The guard was re-run in the real browser against a real (d) selection: ignored. Cost if wrong: one more guard change before Task 5.
+- **For Task 5:** WXT's `createShadowRootUi` has an `isolateEvents` option (an array of event types stopped at the shadow root). It could replace the per-textarea `stopPropagation`, but the document-level Escape listener would then no longer see Escape from inside the popup, so Escape must be handled inside. Task 5's call.
+- **For the stretch goal:** a nested explanation must read the selection with `shadowRoot.getSelection()` or `getComposedRanges`; `window.getSelection()` only ever reports it as collapsed.
 
 ## Self-review notes
 

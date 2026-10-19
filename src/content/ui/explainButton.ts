@@ -32,6 +32,8 @@ const STYLE = `
 export interface ExplainButtonHandle {
   show(rect: DOMRect): void;
   hide(): void;
+  /** The shadow host, so selections inside our own UI can be ignored. */
+  hostElement(): HTMLElement | null;
 }
 
 export async function createExplainButton(
@@ -39,13 +41,15 @@ export async function createExplainButton(
   onClick: () => void,
 ): Promise<ExplainButtonHandle> {
   let buttonEl: HTMLButtonElement | null = null;
+  let hostEl: HTMLElement | null = null;
 
   const ui = await createShadowRootUi(ctx, {
     name: 'highlight-explainer-button',
     position: 'inline',
     anchor: 'body',
     css: STYLE,
-    onMount(container) {
+    onMount(container, shadow) {
+      hostEl = shadow.host as HTMLElement;
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'explain-button';
@@ -74,5 +78,6 @@ export async function createExplainButton(
     hide() {
       buttonEl?.classList.remove('visible');
     },
+    hostElement: () => hostEl,
   };
 }

@@ -96,6 +96,8 @@ export interface PopupHandle {
   failRegenerate(message: string): void;
   /** The muted line under the answer saying what the explanation was based on. Empty text hides it. */
   setContextNote(text: string): void;
+  /** The shadow host, so selections inside our own UI can be ignored. */
+  hostElement(): HTMLElement | null;
   close(): void;
 }
 
@@ -308,6 +310,8 @@ export async function createPopup(ctx: ContentScriptContext): Promise<PopupHandl
       noteEl.textContent = text;
       noteEl.classList.toggle('visible', text.length > 0);
     },
+
+    hostElement: () => hostEl,
 
     close,
   };
