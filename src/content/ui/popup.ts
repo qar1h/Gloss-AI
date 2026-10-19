@@ -1,12 +1,12 @@
 // The Shadow DOM popup: renders the streamed explanation as markdown, shows loading
 // and error states, and closes on Escape or an outside click. Never touches the main
 // chat page. Markdown is always sanitized (DOMPurify) before it touches innerHTML.
-// The "Simpler" button (v9) lives in the header; what it shows is decided by simplerState.ts.
+// The "Simpler" button (v9) lives in the header; what it shows is decided by threadState.ts.
 
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import type { SimplerButtonView } from '../simplerState';
+import type { SimplerButtonView } from '../threadState';
 
 const STYLE = `
   .popup {

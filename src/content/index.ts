@@ -19,7 +19,7 @@ import { MAX_SIMPLICITY_LEVEL, SIMPLICITY_LEVELS } from '@/context/levels';
 import { resolveRecentCount } from '@/context/limits';
 import { describeCoveragePopup } from '@/context/report';
 import { promptAtLevel } from '@/context/simplicity';
-import { initialSimplerState, simplerButtonView, simplerReduce, type SimplerEvent, type SimplerSend } from './simplerState';
+import { initialThreadState, simplerButtonView, threadReduce, type ThreadEvent, type ThreadSend } from './threadState';
 import { EXPLAIN_PORT_NAME } from '@/messaging/types';
 import { startExplainCall, type CallPort, type ExplainCall } from './explainCall';
 
@@ -78,14 +78,14 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
     }
 
     const state: { closed: boolean; call: ExplainCall | null } = { closed: false, call: null };
-    // One Simpler state per popup; startRequest is set once the prompt is prepared.
-    let simpler = initialSimplerState();
-    let startRequest: ((send: SimplerSend) => void) | null = null;
-    const dispatch = (event: SimplerEvent): void => {
+    // One thread state per popup; startRequest is set once the prompt is prepared.
+    let thread = initialThreadState();
+    let startRequest: ((send: ThreadSend) => void) | null = null;
+    const dispatch = (event: ThreadEvent): void => {
       if (state.closed) return;
-      const result = simplerReduce(simpler, event);
-      simpler = result.state;
-      popup.setSimplerButton(simplerButtonView(simpler));
+      const result = threadReduce(thread, event);
+      thread = result.state;
+      popup.setSimplerButton(simplerButtonView(thread));
       const send = result.send;
       if (!send || !startRequest) return;
       try {
@@ -105,7 +105,7 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
       },
       () => dispatch({ type: 'press' }),
     );
-    popup.setSimplerButton(simplerButtonView(simpler));
+    popup.setSimplerButton(simplerButtonView(thread));
 
     try {
       const settings = await getSettings();
@@ -115,7 +115,9 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
 
       popup.setContextNote(describeCoveragePopup(prepared.assembled.report, prepared.coverage));
 
-      startRequest = ({ level, request }) => {
+      startRequest = (send) => {
+        if (send.kind !== 'explanation') return; // follow-ups are wired up in v10 Task 6
+        const { level, request } = send;
         // Always built from the level-0 prompt of this click, never from the text on screen.
         const sent = { ...prepared, assembled: promptAtLevel(prepared.assembled, level) };
         recordPrepared(sent);
@@ -130,9 +132,9 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
         state.call?.cancel(); // the previous call has finished; nothing more may arrive from it
         state.call = startExplainCall(connectExplainPort, sent.assembled.prompt, {
           onChunk: (text) => popup.appendChunk(text),
-          onDone: () => {
+          onDone: (text) => {
             popup.markDone();
-            dispatch({ type: 'done', request });
+            dispatch({ type: 'done', request, text });
           },
           onError: (message) => {
             if (level === 0) popup.showError(message);
@@ -141,7 +143,7 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
           },
         });
       };
-      startRequest({ level: 0, request: 0 });
+      startRequest({ kind: 'explanation', level: 0, request: 0 });
     } catch (error) {
       if (state.closed) return;
       const message = error instanceof Error ? error.message : String(error);
