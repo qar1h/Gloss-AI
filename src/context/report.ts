@@ -1,7 +1,7 @@
 // Turns a PromptReport into the lines and tables the console and popup show. Pure.
 
 import { MAX_SIMPLICITY_LEVEL, SIMPLICITY_LEVELS } from './levels';
-import type { Coverage, PromptReport } from './types';
+import type { Coverage, PromptReport, ThreadReport } from './types';
 
 function levelLine(report: PromptReport): string {
   const level = report.simplicityLevel;
@@ -111,6 +111,19 @@ export function describeCoveragePopup(report: PromptReport, coverage: Coverage):
 
   const text = parts.join(' · ');
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * The popup's note for the answer at the bottom of the thread (v10): the click-time note, plus how
+ * many earlier follow-ups that answer's prompt left out to fit the thread budget (the same count as
+ * the report's `left out of the thread` line). Unchanged when nothing was left out, so Explain and
+ * Simpler on the explanation keep the click-time note exactly.
+ */
+export function describeThreadPopup(clickNote: string, thread: ThreadReport | null): string {
+  const dropped = thread?.droppedExchanges.length ?? 0;
+  if (dropped === 0) return clickNote;
+  const part = `${dropped} earlier follow-up${dropped === 1 ? '' : 's'} left out to fit the thread budget`;
+  return clickNote ? `${clickNote} · ${part}` : part.charAt(0).toUpperCase() + part.slice(1);
 }
 
 /** The v3/v4 console wording, unchanged. */

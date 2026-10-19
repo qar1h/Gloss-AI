@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { candidateTable, describeCoverageForConsole, describeCoveragePopup, sectionTable, summaryLines } from './report';
-import type { PromptReport } from './types';
+import {
+  candidateTable,
+  describeCoverageForConsole,
+  describeCoveragePopup,
+  describeThreadPopup,
+  sectionTable,
+  summaryLines,
+} from './report';
+import type { PromptReport, ThreadReport } from './types';
 
 function makeReport(overrides: Partial<PromptReport> = {}): PromptReport {
   return {
@@ -139,6 +146,33 @@ describe('candidateTable', () => {
 describe('sectionTable', () => {
   it('lists each section with its est. tokens', () => {
     expect(sectionTable(makeReport())).toEqual([{ section: 'instructions', 'est. tokens': 60 }]);
+  });
+});
+
+describe('describeThreadPopup (v10: the popup says when follow-ups were left out)', () => {
+  const thread = (dropped: number): ThreadReport => ({
+    followUpNumber: dropped + 2,
+    budgetTokens: 3000,
+    explanationEstTokens: 200,
+    includedExchanges: [dropped + 1],
+    droppedExchanges: Array.from({ length: dropped }, (_, i) => ({ number: i + 1, estTokens: 700 })),
+    usedEstTokens: 900,
+    questionEstTokens: 20,
+  });
+  const NOTE = '3 excerpts from elsewhere in the chat · 51 of ~64 messages indexed';
+
+  it('leaves the click-time note alone when nothing was left out', () => {
+    expect(describeThreadPopup(NOTE, null)).toBe(NOTE);
+    expect(describeThreadPopup(NOTE, thread(0))).toBe(NOTE);
+  });
+
+  it('adds the count of follow-ups left out, matching the report', () => {
+    expect(describeThreadPopup(NOTE, thread(1))).toBe(`${NOTE} · 1 earlier follow-up left out to fit the thread budget`);
+    expect(describeThreadPopup(NOTE, thread(2))).toBe(`${NOTE} · 2 earlier follow-ups left out to fit the thread budget`);
+  });
+
+  it('stands alone, capitalised, when there is no click-time note', () => {
+    expect(describeThreadPopup('', thread(2))).toBe('2 earlier follow-ups left out to fit the thread budget');
   });
 });
 

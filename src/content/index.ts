@@ -3,7 +3,8 @@
 // every call ends, even if the background drops the connection). A "Simpler" press (v9)
 // re-sends the prompt prepared at click time with a simpler instruction, and a follow-up question
 // (v10) sends that same prompt plus the thread (context/thread.ts): nothing is re-read from the
-// page or the index, retrieval does not re-run, and the popup's context note is left as it is.
+// page or the index, retrieval does not re-run, and the popup's context note keeps its click-time
+// text (plus a count when a follow-up's prompt had to leave earlier follow-ups out).
 // What the thread holds, and which answer Simpler rewrites, is decided by threadState.ts.
 
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
@@ -19,7 +20,7 @@ import { finalizeFocal } from '@/context/focal';
 import { prepareExplainPrompt } from '@/context/gather';
 import { SIMPLICITY_LEVELS } from '@/context/levels';
 import { resolveRecentCount } from '@/context/limits';
-import { describeCoveragePopup } from '@/context/report';
+import { describeCoveragePopup, describeThreadPopup } from '@/context/report';
 import { promptAtLevel } from '@/context/simplicity';
 import { followUpPrompt } from '@/context/thread';
 import {
@@ -132,7 +133,8 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
       const prepared = await prepareExplainPrompt(requireAdapter().getConversationId(), focal, settings);
       if (state.closed) return; // popup was closed while retrieval ran — send nothing
 
-      popup.setContextNote(describeCoveragePopup(prepared.assembled.report, prepared.coverage));
+      const clickNote = describeCoveragePopup(prepared.assembled.report, prepared.coverage);
+      popup.setContextNote(clickNote);
 
       startRequest = (send) => {
         // Always built from the level-0 prompt of this click, never from the page or the index again.
@@ -152,6 +154,8 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
           onChunk: (text) => popup.appendChunk(text),
           onDone: (text) => {
             popup.markDone();
+            // The note describes the answer now at the bottom: its prompt may have left follow-ups out.
+            popup.setContextNote(describeThreadPopup(clickNote, assembled.report.thread));
             dispatch({ type: 'done', request: send.request, text });
           },
           onError: (message) => {
