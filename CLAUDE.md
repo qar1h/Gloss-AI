@@ -158,6 +158,7 @@ I chose to add features before v6. The versions below (v7–v13) are built **one
 - One click regenerates the explanation at a simpler level.
 - It **rebuilds from the original prompt with a different instruction**, not by paraphrasing the explanation already shown, so the retrieved context is kept (and retrieval does not need to re-run).
 - Pressing it repeatedly keeps getting simpler, so it tracks a **level**, not a flag.
+- **Status: COMPLETE** (live checklist passed on claude.ai and ChatGPT 2026-10-19; see the v9 notes under "Current status").
 
 ### v10: Follow-up questions in the popup
 - A text box so I can ask a question about the explanation without leaving the popup. This is the core problem the whole project exists to solve, so it matters.
@@ -243,9 +244,9 @@ I chose to add features before v6. The versions below (v7–v13) are built **one
 
 ## Current status
 
-- **Current version:** v9 ("Simpler" button in the popup), **not started**. v8 is complete and merged to main (`dc53df4`). 381 unit tests pass.
-- **Completed versions:** v1, v2, v3, v4, v5, v7, v8 (v6 is deferred, not done)
-- **Remaining order:** v9, v10, v11, v12, v13, then v6 (deferred; see "Plan change")
+- **Current version:** v10 (follow-up questions in the popup), **not started**. v9 is complete and merged to main. 405 unit tests pass.
+- **Completed versions:** v1, v2, v3, v4, v5, v7, v8, v9 (v6 is deferred, not done)
+- **Remaining order:** v10, v11, v12, v13, then v6 (deferred; see "Plan change")
 - **Notes:**
 
   **What was built (v1):** Highlight text in a Claude answer on claude.ai, click the "Explain" button that appears, and get a streamed, markdown-rendered, plain-language explanation in a Shadow DOM popup anchored near the highlight — using the highlight, its paragraph, its message, the user question that produced it, and the last few messages as context. Options page stores the Gemini API key, model id, and a debug toggle. Confirmed working end-to-end on live claude.ai, for both short and longer chats.
@@ -424,3 +425,26 @@ I chose to add features before v6. The versions below (v7–v13) are built **one
   - **B1** claude.ai unchanged (Explain, `__glossSearch`, `__glossHybrid`, `__glossPrompt`). **B2/B3** extraction and a real prompt: correct question turn, correct recent messages, excerpts in chat order, formulas once, tables as rows, placeholders only on windowed blocks. **B4** switching chats: failed, fixed in `c9cb056` (the guard was too wide; the transcript root and tracker followed the stale tree). **B5** detached window: failed first on a second answer renderer, fixed in `f7126cb` (anchor on the wrapper); then passed. **B6** edit vs regenerate. **B7** two tabs: embedding ranks present, 86 of 86 chunks embedded (the F2 fix holds). **B8** interactions. **B9** edge content.
   - **Minor, not fixed (v4 behaviour):** `__glossHybrid("text")` with nothing selected marks every message that contains the typed text as "own msg", because typed text has no source message (`dumpHybrid` in `indexer.ts`). In B7 that made every row say `yes`. It is working as built, but the column means something different in typed mode; worth a clearer label sometime.
   - **Lessons v8 adds:** the widest-anchor rule (Design rules); a guard must be scoped to what it protects and shown to recover (the lesson after the failure-mode list); "isn't UTF-8 encoded" can mean a noncharacter (Development gotchas); fixtures saved through the editor get reformatted, so trust them for structure, never whitespace.
+
+  **What was built (v9): a "Simpler" button in the popup.** Plan: `docs/superpowers/plans/2026-10-19-highlight-explainer-v9.md`. Each press re-sends the prompt prepared at click time with only its last section, the `task` instruction, swapped (`promptAtLevel`, `src/context/simplicity.ts`). Retrieval, embedding and assembly don't re-run, the page isn't re-read, and the explanation on screen is never sent. Four levels (`src/context/levels.ts`): Explain, simpler, even simpler, simplest. Level 0 is the v1 instruction, unchanged. A pure state machine (`src/content/simplerState.ts`) drives the button. Nothing in `src/sites/`, `src/background/`, `src/llm/`, `src/messaging/` or `src/rag/` changed, so both sites behave the same by construction.
+
+  **Key decisions (v9):**
+  - **Swap the instruction, don't re-assemble.** Re-running the assembler with a longer instruction could shift the budget and drop an excerpt, so the context would quietly change between levels. The budget is therefore NOT re-applied at levels above 0: a longer instruction may take a prompt slightly over it (about 50 est. tokens), and the report says so with a level line, plus a warning when it crosses the budget.
+  - **The prompt is a snapshot from click time.** A press is based on exactly what the first explanation was based on.
+  - **Replace, not stack.** The old text stays greyed until the first chunk of the new one arrives. A failed press restores it, with the error line at the top, and the level does not advance (a press retries the same level). The context note is set once per click and never touched by a press.
+  - **One call per press, only on a press.** The full ladder costs 4 Gemini calls for one highlight; the free-tier daily request cap is what this uses up fastest.
+  - `__glossLastPrompt()` shows the prompt actually sent at its level; `__glossPrompt(text, { level })` dry-runs any level without a call.
+
+  **Found by the final review (v9):** a failed press appended its error line below a long explanation, off screen in the scrolling popup, so the press looked like it did nothing. Fixed (the line goes first and the popup scrolls to the top), pinned by `src/content/ui/popup.test.ts`, the first popup DOM test (linkedom, with WXT's `createShadowRootUi` stubbed).
+
+  **v9 live checklist: COMPLETE (2026-10-19), all ten steps passed on claude.ai and ChatGPT.**
+  - **Context kept, measured:** the same highlight at level 0 vs level 1 gave est. tokens per section of instructions 58/58, excerpts 2115/2115, recent 74/74, message 614/614, highlight 73/73, task 56/107. Every context section was identical and only `task` changed, +51 tokens as reported, so comparing levels compares instructions, not context.
+  - **Four levels confirmed by live comparison, not assumed.** The plan treated "levels 2 and 3 come out near-identical, so drop one" as a real outcome. Compared across highlights (a term, a line of code, a formula, a paragraph), the four levels came out genuinely different, so all four stay.
+  - **Edges:** a failed press restores the old text with the error at the top and retries the same level; Escape mid-press leaves no background error and a fresh Explain starts at level 0; a double-click sends exactly one request.
+  - **Regressions:** `__glossSearch` and `__glossHybrid` print as before. The "message is still being written" popup shows only the close button, with no Simpler button (correct: there is nothing to simplify).
+
+  **Known minor issues carried into v10 (from the final review, not fixed):**
+  - If the background drops the port mid-answer without sending done or error, the popup stays on "Simplifying…" until closed (level 0 already had the same hang on "Thinking…"). v10 adds more calls per popup, so this is worth fixing there: `port.onDisconnect` fires only for a disconnect from the other end, so it can safely fail the request.
+  - At levels above 0, the report's "always-include" figure is still level 0's number, short by the instruction's extra tokens.
+  - A regenerate that finished with no chunks would advance the level with the old text still shown. This can't happen with Gemini (`gemini.ts` throws when no text was yielded), but it matters for v13's Ollama provider.
+  - Late messages are filtered by `requestId` per port; a `state.port === port` check would make that structural.
