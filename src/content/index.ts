@@ -1,5 +1,6 @@
 // Wires together selection, the Explain button, the popup, the site adapter, retrieval and
-// prompt assembly, and the Port connection to the background worker. A "Simpler" press (v9)
+// prompt assembly, and the calls to the background worker (one Port per call, explainCall.ts:
+// every call ends, even if the background drops the connection). A "Simpler" press (v9)
 // re-sends the prompt prepared at click time with a simpler instruction: nothing is re-read
 // from the page or the index, and the popup's context note is left as it is.
 
@@ -19,11 +20,18 @@ import { resolveRecentCount } from '@/context/limits';
 import { describeCoveragePopup } from '@/context/report';
 import { promptAtLevel } from '@/context/simplicity';
 import { initialSimplerState, simplerButtonView, simplerReduce, type SimplerEvent, type SimplerSend } from './simplerState';
-import {
-  EXPLAIN_PORT_NAME,
-  type ExplainToBackground,
-  type ExplainToContent,
-} from '@/messaging/types';
+import { EXPLAIN_PORT_NAME } from '@/messaging/types';
+import { startExplainCall, type CallPort, type ExplainCall } from './explainCall';
+
+/** A Port to the background for one call; logs why it closed, if Chrome says. */
+function connectExplainPort(): CallPort {
+  const port = browser.runtime.connect({ name: EXPLAIN_PORT_NAME });
+  port.onDisconnect.addListener(() => {
+    const error = browser.runtime.lastError;
+    if (error) console.warn('[highlight-explainer] explain connection closed:', error.message);
+  });
+  return port;
+}
 
 export async function initHighlightExplainer(ctx: ContentScriptContext): Promise<void> {
   if (!getAdapter()) return; // a page we have no adapter for: do nothing at all
@@ -63,7 +71,7 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
       return;
     }
 
-    const state: { closed: boolean; port: Browser.runtime.Port | null } = { closed: false, port: null };
+    const state: { closed: boolean; call: ExplainCall | null } = { closed: false, call: null };
     // One Simpler state per popup; startRequest is set once the prompt is prepared.
     let simpler = initialSimplerState();
     let startRequest: ((send: SimplerSend) => void) | null = null;
@@ -87,7 +95,7 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
       selection.rect,
       () => {
         state.closed = true;
-        state.port?.disconnect();
+        state.call?.cancel();
       },
       () => dispatch({ type: 'press' }),
     );
@@ -113,29 +121,19 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
         }
         if (level > 0) popup.beginRegenerate(SIMPLICITY_LEVELS[level]!.label);
 
-        state.port?.disconnect(); // the previous call has finished; nothing more may arrive from it
-        const requestId = crypto.randomUUID();
-        const port = browser.runtime.connect({ name: EXPLAIN_PORT_NAME });
-        state.port = port;
-
-        port.onMessage.addListener((rawMessage: unknown) => {
-          const message = rawMessage as ExplainToContent;
-          if (message.requestId !== requestId) return;
-
-          if (message.type === 'explain-chunk') {
-            popup.appendChunk(message.text);
-          } else if (message.type === 'explain-done') {
+        state.call?.cancel(); // the previous call has finished; nothing more may arrive from it
+        state.call = startExplainCall(connectExplainPort, sent.assembled.prompt, {
+          onChunk: (text) => popup.appendChunk(text),
+          onDone: () => {
             popup.markDone();
             dispatch({ type: 'done', request });
-          } else if (message.type === 'explain-error') {
-            if (level === 0) popup.showError(message.message);
-            else popup.failRegenerate(message.message);
+          },
+          onError: (message) => {
+            if (level === 0) popup.showError(message);
+            else popup.failRegenerate(message);
             dispatch({ type: 'error', request });
-          }
+          },
         });
-
-        const outgoing: ExplainToBackground = { type: 'explain-request', requestId, prompt: sent.assembled.prompt };
-        port.postMessage(outgoing);
       };
       startRequest({ level: 0, request: 0 });
     } catch (error) {
