@@ -158,8 +158,41 @@ describe('popup — closing', () => {
     fire(doc.body, 'pointerdown');
     expect(closed).toBe(0);
     expect(popupEl().classList.contains('visible')).toBe(true);
-    fire(doc, 'keydown', { key: 'Escape' });
+    fire(doc.body, 'keydown', { key: 'Escape' }); // focus on nothing in particular
     expect(closed).toBe(1);
+  });
+
+  it('a fresh popup still closes on an Escape anywhere (v1 behaviour)', () => {
+    explained();
+    const pageBox = doc.createElement('textarea');
+    doc.body.append(pageBox);
+    fire(pageBox, 'keydown', { key: 'Escape' });
+    expect(closed).toBe(1);
+    pageBox.remove();
+  });
+
+  it('a sticky popup ignores an Escape meant for the page (review finding)', () => {
+    explained();
+    fire(input(), 'input');
+    const pageBox = doc.createElement('textarea'); // e.g. the chat's composer, or a message being edited
+    const pageMenu = doc.createElement('button'); // e.g. a menu the site closes on Escape
+    doc.body.append(pageBox, pageMenu);
+    fire(pageBox, 'keydown', { key: 'Escape' });
+    fire(pageMenu, 'keydown', { key: 'Escape' });
+    expect(closed).toBe(0);
+
+    // A page handler that already used the Escape (preventDefault) is not ours either.
+    const swallow = (event: Event) => event.preventDefault();
+    doc.body.addEventListener('keydown', swallow);
+    fire(doc.body, 'keydown', { key: 'Escape' });
+    doc.body.removeEventListener('keydown', swallow);
+    expect(closed).toBe(0);
+
+    // From inside the popup it still closes.
+    fire(container.querySelector('.popup-simpler')!, 'keydown', { key: 'Escape' });
+    expect(closed).toBe(1);
+    pageBox.remove();
+    pageMenu.remove();
   });
 
   it('a follow-up also makes it stick, and × still closes', () => {
@@ -190,7 +223,10 @@ describe('popup — the text box', () => {
   it('keys and paste in the box do not reach the page', () => {
     explained();
     const seen: string[] = [];
-    for (const type of ['keydown', 'keyup', 'keypress', 'beforeinput', 'input', 'paste', 'copy', 'cut']) {
+    const types = ['keydown', 'keyup', 'keypress', 'beforeinput', 'input', 'paste', 'copy', 'cut'];
+    // Dropping text into the box (review finding: ChatGPT has a page-wide drop zone).
+    types.push('dragenter', 'dragover', 'dragleave', 'drop');
+    for (const type of types) {
       doc.addEventListener(type, () => seen.push(type));
       fire(input(), type, { key: 'a' });
     }

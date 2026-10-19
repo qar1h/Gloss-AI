@@ -7,8 +7,9 @@
 // then each follow-up's question and answer) / a footer (the context note, the text box). Answers
 // are only ever streamed into the LATEST answer element. Once the user has typed in the box or
 // asked a follow-up, an outside click no longer closes the popup (losing a thread to a stray click
-// is the worst failure v10 could have); × and Escape always do. Keys, input and clipboard events in
-// the box stop there, so the chat page's own shortcuts and paste handler never see them.
+// is the worst failure v10 could have), nor does an Escape meant for the page; × and an Escape in
+// the popup always do. Keys, input, clipboard and drop events in the box stop there, so the chat
+// page's own shortcuts, paste handler and drop zone never see them.
 
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 import { marked } from 'marked';
@@ -118,8 +119,20 @@ const STYLE = `
 
 const THINKING = '<p class="popup-loading">Thinking…</p>';
 
-/** Events in the text box that the chat page must never see (its shortcuts, its paste handler). */
-const ISOLATED_INPUT_EVENTS = ['keyup', 'keypress', 'beforeinput', 'input', 'paste', 'copy', 'cut'] as const;
+/** Events in the text box that the chat page must never see (its shortcuts, its paste handler, its drop zone). */
+const ISOLATED_INPUT_EVENTS = [
+  'keyup',
+  'keypress',
+  'beforeinput',
+  'input',
+  'paste',
+  'copy',
+  'cut',
+  'dragenter',
+  'dragover',
+  'dragleave',
+  'drop',
+] as const;
 
 export interface PopupHandlers {
   onClose(): void;
@@ -229,8 +242,22 @@ export async function createPopup(ctx: ContentScriptContext): Promise<PopupHandl
     handlers.onAsk(inputEl.value);
   }
 
+  /**
+   * Once sticky, the user works on the page with the popup open, so an Escape there (cancelling a
+   * message edit, closing a site menu) is not for us: it closes the popup only when it comes from
+   * inside the popup, or from no particular element and unused by the page.
+   */
+  function escapeIsForPopup(event: KeyboardEvent): boolean {
+    const target = event.target as Node | null;
+    if (hostEl && target && hostEl.contains(target)) return true;
+    if (event.defaultPrevented) return false;
+    return target === document.body || target === document.documentElement || target === document;
+  }
+
   function onKeyDown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') close();
+    if (event.key !== 'Escape') return;
+    if (sticky && !escapeIsForPopup(event)) return;
+    close();
   }
 
   function onPointerDown(event: PointerEvent): void {

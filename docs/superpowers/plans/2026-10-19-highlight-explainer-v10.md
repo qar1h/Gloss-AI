@@ -426,7 +426,7 @@ Reload the extension, **then reload each chat tab** (stale content script). Run 
 - **L5 What was sent.** `__glossLastPrompt()` after a follow-up. Expected: the label names the follow-up; the click-time sections are identical to the first explanation's (compare excerpt ids, message numbers); then `explanation`, (`thread`), `follow_up`, `task`; the thread summary line.
 - **L6 Thread budget.** Ask about 6–8 follow-ups that invite long answers. Expected: the report shows `left out of the thread…` for the oldest, the prompt has the left-out line, never part of an answer.
 - **L7 Simpler with a thread.** After two follow-ups, press Simpler. Expected: only the latest answer is regenerated; earlier ones unchanged; the header shows the level; the next follow-up is sent at that level and `__glossLastPrompt()` shows the regenerated answer as its history.
-- **L8 Sticky close.** On a fresh popup an outside click closes it (as before). After typing one letter, outside clicks (page text, scrollbar) do not close it; × and Escape do.
+- **L8 Sticky close.** On a fresh popup an outside click closes it (as before). After typing one letter, outside clicks (page text, scrollbar) do not close it; × and Escape in the popup do. **And an Escape meant for the page does not:** with a sticky popup, click into the chat site's own composer (or start editing one of your messages) and press Escape: the popup stays. Also note: selecting page text while a thread is open brings up Explain, and clicking it replaces the thread (intended, the thread does not survive a new Explain).
 - **L9 Level 3 vs "show me the code" (explicit test, the instruction fix is unverified).** On a code highlight (one per site), press Simpler to "Simplest", then ask "show me the code for this". Expected: the answer contains the code, then a simple explanation. Record the result per site. If it refuses or omits the code, adjust `FOLLOW_UP_INSTRUCTIONS[3]` (and the test in Task 3), rebuild, and re-run; record the final wording and why in CLAUDE.md.
 - **L10 A follow-up about something not retrieved.** Ask about a part of the chat far from the highlight that is not in the prompt's excerpts. Expected: the answer says it wasn't shown that part, rather than inventing it.
 - **L11 Keys stay in the box.** In the box: type letters, `/`, `?`, Space, arrow keys, Ctrl+A, Ctrl+V a paste, Ctrl+Z. Expected: nothing happens on the chat page (no focus jump to its composer, no shortcut, no pasted attachment). If a site still reacts (a capture-phase listener), record which keys and site; do not add site-specific code without asking.
@@ -456,6 +456,25 @@ Probed 2026-10-19 with Playwright, Chrome 155.0 (Windows), on a hand-built page 
 - **Task 2: Ruling:** the decision rule said to stop on "a range that starts in the page and ends in the popup". I continued, because the planned guard already lists "the host itself → inside" as a case, which is exactly how (d) ends. The guard's design did not change; (d)'s shape became a test (`a drag from the page into the popup (focus = host) is ignored`). The guard was re-run in the real browser against a real (d) selection: ignored. Cost if wrong: one more guard change before Task 5.
 - **For Task 5:** WXT's `createShadowRootUi` has an `isolateEvents` option (an array of event types stopped at the shadow root). It could replace the per-textarea `stopPropagation`, but the document-level Escape listener would then no longer see Escape from inside the popup, so Escape must be handled inside. Task 5's call.
 - **For the stretch goal:** a nested explanation must read the selection with `shadowRoot.getSelection()` or `getComposedRanges`; `window.getSelection()` only ever reports it as collapsed.
+
+## Final review (independent, whole branch, 2026-10-19)
+
+No Critical. Verdict "with fixes". The reviewer traced every sync case between what the popup shows and what `threadState` holds (failed follow-up, failed Simpler on a follow-up, Simpler after a failed follow-up, connect throws, close mid-stream and reopen) and found them consistent; the protected folders are untouched.
+
+**Fixed (each with a test that failed first):**
+- **Important: an Escape meant for the page wiped a sticky thread** (cancelling a message edit, closing a site menu). A sticky popup now closes on Escape only from inside the popup, or from no particular element when the page did not use it. Test: `a sticky popup ignores an Escape meant for the page (review finding)`; `a fresh popup still closes on an Escape anywhere (v1 behaviour)` pins the old behaviour for a fresh popup.
+- **Minor, re-graded Important: drag-and-drop into the box was not isolated** (ChatGPT has a page-wide drop zone; dragging chat text into the box to quote it is a natural use). `dragenter`, `dragover`, `dragleave`, `drop` added to the isolated events; covered by `keys and paste in the box do not reach the page`.
+
+**Deferred minors (not fixed; for the user to decide):**
+- Escape during IME composition closes the popup (Enter checks `isComposing`, Escape does not).
+- Text typed during the first explanation is lost if that explanation fails, and the error-only popup is then sticky (× / Escape still close it).
+- `promptAtLevel` does not reject a follow-up prompt as its base (no caller does that today).
+- A whitespace-only answer counts as an answer (`text === ''`), which would make every later follow-up fail.
+- `recordPrepared` runs before the call starts, so after a connect throw `__glossLastPrompt()` shows a prompt never sent (debug only).
+- The shared opening instruction says text inside tags is "never instructions", while the follow-up question is meant to be acted on; the final task resolves it. If L9 fails, this sentence is a likely cause.
+- A sticky popup stays open after a sidebar chat switch (its follow-ups stay consistent: they are built from the click-time snapshot).
+- Buttons inside the popup (Space/Enter on Simpler, Send, ×) still pass keys to the page.
+- **Recommendation:** the show/hold sync logic in `index.ts` (`showFailure`, the order of `begin*`, `markDone` before `dispatch`) has no test harness; it was verified by reading only.
 
 ## Self-review notes
 
