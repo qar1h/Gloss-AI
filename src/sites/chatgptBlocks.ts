@@ -293,7 +293,7 @@ function visit(el: Element, out: Block[]): void {
   else push(out, 'paragraph', textOf(el));
 }
 
-/** An assistant answer's content root (the element carrying `data-dil-message-id`) as ordered blocks. */
+/** An assistant answer's element (`[data-markdown-text-style="assistant-message"]`, with or without the renderer inside) as ordered blocks. */
 export function assistantBlocks(root: Element): Block[] {
   const out: Block[] = [];
   if (root.matches(CODE_BLOCK)) {

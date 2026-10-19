@@ -6,7 +6,7 @@
 //   - The conversation is a virtualized list: a box with the whole chat's height, and inside it
 //     only the turns near the viewport (3-12 of them, a contiguous run). `[data-turn-key]` is one
 //     turn; its UUID is its only stable identity.
-//   - A turn holds `[data-user-message-bubble]` (the question) and `[data-dil-message-id]` (the
+//   - A turn holds `[data-user-message-bubble]` (the question) and `[data-markdown-text-style="assistant-message"]` (the
 //     answer body); `[data-talvt-turn-state]` is "complete" or "in_progress".
 //   - There is NO absolute index in the DOM. `fallback-turn-N` renumbers as the window moves and
 //     is deliberately not used. Positions come from sites/turnSequence.ts, and ids stay positional
@@ -26,7 +26,9 @@ import { TurnSequence, isLocalPosition, positionOf, type Role } from './turnSequ
 
 const TURN = '[data-turn-key]';
 const USER = '[data-user-message-bubble]';
-const ASSISTANT = '[data-dil-message-id]';
+// The answer element. It wraps the [data-dil-message-id] renderer in one layout and holds the blocks
+// directly in another (fixtures/chatgpt-other-answer.html), so the renderer is not the anchor.
+const ASSISTANT = '[data-markdown-text-style="assistant-message"]';
 const TURN_STATE = '[data-talvt-turn-state]';
 const CONVERSATION_ROOT = '[data-thread-find-target="conversation"]';
 const DOM_CONVERSATION_ID = '[data-chatgpt-selection-conversation-id]';

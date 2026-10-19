@@ -40,7 +40,11 @@ function turn(id: string, o: TurnOptions = {}): string {
       ? ''
       : `<div data-user-message-bubble="true"><div class="whitespace-pre-wrap">${o.user ?? `question ${id}`}</div></div>`;
   const renderers = o.assistant === null ? 0 : (o.assistantRenderers ?? 1);
-  const assistant = Array.from({ length: renderers }, (_, i) => `<div data-dil-message-id="m-${id}-${i}"><p>${o.assistant ?? `answer ${id}`}</p></div>`).join('');
+  // The real nesting: the answer element wraps the renderer (fixtures/chatgpt-conversation.html).
+  const assistant = Array.from(
+    { length: renderers },
+    (_, i) => `<div data-markdown-text-style="assistant-message"><div data-dil-message-id="m-${id}-${i}"><p>${o.assistant ?? `answer ${id}`}</p></div></div>`,
+  ).join('');
   return `<div class="wrapper"><div data-turn-key="${id}"><div data-content-search-turn-key="fallback-turn-0"><div data-talvt-turn-state="${o.state ?? 'complete'}">${user}${assistant}${o.extra ?? ''}</div></div></div></div>`;
 }
 
@@ -88,7 +92,8 @@ describe('chatgptAdapter on the real conversation fixture (3 turns)', () => {
     expect(ids(messages)).toEqual([10000, 10001, 10002, 10003, 10004, 10005].map(String));
     expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'user', 'assistant']);
     expect(messages[0]!.element.matches('[data-user-message-bubble]')).toBe(true);
-    expect(messages[1]!.element.matches('[data-dil-message-id]')).toBe(true);
+    expect(messages[1]!.element.matches('[data-markdown-text-style="assistant-message"]')).toBe(true);
+    expect(messages[1]!.element.querySelector('[data-dil-message-id]')).not.toBeNull(); // this layout has the renderer inside
   });
 
   it('returns the same ids when asked again (stable within the session)', () => {

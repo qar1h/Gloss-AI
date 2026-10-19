@@ -169,7 +169,7 @@ describe('the ChatGPT adapter with a windowed block in an answer', () => {
     const chat = `windowed-chat-${++chatCounter}`;
     const html = `<div data-thread-find-target="conversation"><div><div data-turn-key="t1"><div data-content-search-turn-key="fallback-turn-0"><div data-talvt-turn-state="complete">
       <div data-user-message-bubble="true"><div class="whitespace-pre-wrap">write me the file</div></div>
-      <div data-dil-message-id="m1"><p>Here is the file:</p>${extraAnswerHtml}</div>
+      <div data-markdown-text-style="assistant-message"><div data-dil-message-id="m1"><p>Here is the file:</p>${extraAnswerHtml}</div></div>
     </div></div></div></div></div>`;
     const { document } = parseHTML(`<!doctype html><html><body>${html}</body></html>`);
     const g = globalThis as unknown as Record<string, unknown>;
