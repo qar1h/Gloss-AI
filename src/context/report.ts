@@ -11,6 +11,21 @@ function levelLine(report: PromptReport): string {
   return `${head} — instruction ≈${extra >= 0 ? '+' : ''}${extra} est. tokens vs level 0; excerpts are the level-0 selection, the budget is not re-applied`;
 }
 
+/** What a follow-up carried of the thread (v10); nothing for Explain or Simpler on the explanation. */
+function threadLines(report: PromptReport): string[] {
+  const t = report.thread;
+  if (!t) return [];
+  const earlier = t.includedExchanges.length > 0 ? `earlier follow-ups ${t.includedExchanges.join(', ')}` : 'no earlier follow-ups';
+  const lines = [
+    `thread: follow-up ${t.followUpNumber}; ≈${t.usedEstTokens} of ${t.budgetTokens} thread-budget est. tokens used (explanation ≈${t.explanationEstTokens}; ${earlier}); new question ≈${t.questionEstTokens}`,
+  ];
+  if (t.droppedExchanges.length > 0) {
+    const list = t.droppedExchanges.map((d) => `follow-up ${d.number} (≈${d.estTokens})`).join(', ');
+    lines.push(`left out of the thread to fit its budget (oldest first): ${list}`);
+  }
+  return lines;
+}
+
 export function summaryLines(report: PromptReport): string[] {
   const lines: string[] = [
     `mode: ${report.mode} — ${report.modeReason}`,
@@ -18,8 +33,9 @@ export function summaryLines(report: PromptReport): string[] {
       report.mode === 'full'
         ? `excerpts ${report.excerptCount} (full-chat mode sends all of them; the max of ${report.maxChunks} applies to retrieval only)`
         : `excerpts ${report.excerptCount} of max ${report.maxChunks}`
-    }`,
+    }${report.thread ? `; the thread is on top of this budget (it has its own: ${report.thread.budgetTokens})` : ''}`,
     levelLine(report),
+    ...threadLines(report),
   ];
   if (report.excludedMessageIds.length > 0) {
     lines.push(

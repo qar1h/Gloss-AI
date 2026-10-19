@@ -39,6 +39,7 @@ function makeReport(overrides: Partial<PromptReport> = {}): PromptReport {
     orderNote: null,
     simplicityLevel: 0,
     levelExtraTokens: 0,
+    thread: null,
     ...overrides,
   };
 }
@@ -68,6 +69,44 @@ describe('summaryLines', () => {
     expect(lines).toContain('255');
     expect(lines).toContain('1670');
     expect(lines).toContain('retrieval');
+  });
+
+  it('describes the thread of a follow-up', () => {
+    const lines = summaryLines(
+      makeReport({
+        thread: {
+          followUpNumber: 4,
+          budgetTokens: 3000,
+          explanationEstTokens: 410,
+          includedExchanges: [2, 3],
+          droppedExchanges: [{ number: 1, estTokens: 700 }],
+          usedEstTokens: 2600,
+          questionEstTokens: 20,
+        },
+      }),
+    );
+    expect(lines).toContain(
+      'thread: follow-up 4; ≈2600 of 3000 thread-budget est. tokens used (explanation ≈410; earlier follow-ups 2, 3); new question ≈20',
+    );
+    expect(lines).toContain('left out of the thread to fit its budget (oldest first): follow-up 1 (≈700)');
+    expect(lines[1]).toMatch(/; the thread is on top of this budget \(it has its own: 3000\)$/);
+  });
+
+  it('says when a follow-up has no earlier follow-ups, and adds no thread lines without a thread', () => {
+    const thread = {
+      followUpNumber: 1,
+      budgetTokens: 3000,
+      explanationEstTokens: 410,
+      includedExchanges: [],
+      droppedExchanges: [],
+      usedEstTokens: 410,
+      questionEstTokens: 20,
+    };
+    const lines = summaryLines(makeReport({ thread }));
+    expect(lines).toContain('thread: follow-up 1; ≈410 of 3000 thread-budget est. tokens used (explanation ≈410; no earlier follow-ups); new question ≈20');
+    expect(lines.some((l) => l.startsWith('left out of the thread'))).toBe(false);
+    const plain = summaryLines(makeReport()).join('\n');
+    expect(plain).not.toContain('thread');
   });
 
   it('names the level in the summary', () => {

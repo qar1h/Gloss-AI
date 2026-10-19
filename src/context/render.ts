@@ -25,6 +25,13 @@ const TAG_NAMES = [
   'user_question',
   'highlight',
   'paragraph',
+  // The thread (v10, thread.ts): the model's own earlier answers are quoted back too.
+  'explanation',
+  'earlier_follow_ups',
+  'follow_up',
+  'follow_up_question',
+  'reader_question',
+  'previous_answer',
 ];
 // `|$` so a fragment at the very end of the text ("…</highlight") is defused too: the tag we
 // append right after it would otherwise complete it.

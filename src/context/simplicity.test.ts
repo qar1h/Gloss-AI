@@ -106,6 +106,11 @@ describe('promptAtLevel', () => {
     expect(promptAtLevel(base, 3).report.warnings).toEqual(base.report.warnings); // 6000 budget: no warning
   });
 
+  it("fixedEstTokens at a level is level 0's plus the extra (v9 known issue)", () => {
+    const r = promptAtLevel(base, 3);
+    expect(r.report.fixedEstTokens).toBe(base.report.fixedEstTokens + r.report.levelExtraTokens);
+  });
+
   it('rejects a level that does not exist', () => {
     for (const bad of [-1, 4, 1.5, NaN]) expect(() => promptAtLevel(base, bad)).toThrow(RangeError);
   });

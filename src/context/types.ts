@@ -142,6 +142,23 @@ export interface PromptReport {
   simplicityLevel: number;
   /** Est. tokens this prompt has over its level-0 version (the instruction is longer); 0 at level 0. */
   levelExtraTokens: number;
+  /** Set only on a follow-up's prompt (v10, thread.ts); null for Explain and Simpler on the explanation. */
+  thread: ThreadReport | null;
+}
+
+/** What a follow-up's prompt carried of the thread, and what it left out. */
+export interface ThreadReport {
+  /** 1-based number of this follow-up in the thread. */
+  followUpNumber: number;
+  budgetTokens: number;
+  explanationEstTokens: number;
+  /** Follow-up numbers sent as history, oldest first. */
+  includedExchanges: number[];
+  /** Left out because the thread budget ran out, oldest first. */
+  droppedExchanges: { number: number; estTokens: number }[];
+  /** The explanation plus the included exchanges: the part the thread budget covers. */
+  usedEstTokens: number;
+  questionEstTokens: number;
 }
 
 export interface AssembledPrompt {

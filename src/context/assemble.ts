@@ -267,6 +267,7 @@ export function assemblePrompt(input: AssemblyInput, opts: AssemblyOptions): Ass
     orderNote: focal.orderStatus.note,
     simplicityLevel: 0,
     levelExtraTokens: 0,
+    thread: null,
   };
 
   return { prompt, report, sections };

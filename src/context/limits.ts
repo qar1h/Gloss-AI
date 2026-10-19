@@ -30,6 +30,15 @@ export const PARAGRAPH_CEILING_TOKENS = 400;
  */
 export const RECENT_ALWAYS_MAX_TOKENS = 1000;
 
+/**
+ * Follow-ups (v10): the explanation plus the earlier follow-ups sent with each new question share
+ * this budget, on top of the click-time prompt's. The oldest follow-ups are dropped whole when it
+ * runs out. An untuned guess, like the 6000 budget and k=8: v6 measures it.
+ */
+export const THREAD_BUDGET_TOKENS = 3000;
+/** The longest follow-up question the popup's text box accepts (about 500 est. tokens). */
+export const FOLLOW_UP_MAX_CHARS = 2000;
+
 /** Covers the cold start (offscreen document + model load) without hanging the popup forever. */
 export const EMBED_QUERY_TIMEOUT_MS = 8000;
 
