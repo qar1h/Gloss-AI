@@ -92,7 +92,7 @@ export interface PopupHandle {
    * of the new one replaces it and the header becomes `title`.
    */
   beginRegenerate(title: string): void;
-  /** The regenerate failed: the previous explanation and header come back, with the error below. */
+  /** The regenerate failed: the previous explanation and header come back, with the error line above them. */
   failRegenerate(message: string): void;
   /** The muted line under the answer saying what the explanation was based on. Empty text hides it. */
   setContextNote(text: string): void;
@@ -297,7 +297,10 @@ export async function createPopup(ctx: ContentScriptContext): Promise<PopupHandl
       const line = document.createElement('p');
       line.className = 'popup-error';
       line.textContent = `Couldn't simplify: ${message}`;
-      bodyEl.append(line);
+      // First, and scrolled into view: at the end of a long explanation it would sit off screen and
+      // the press would look like it did nothing. Scroll the popup itself, never the page.
+      bodyEl.prepend(line);
+      if (popupEl) popupEl.scrollTop = 0;
     },
 
     setContextNote(text: string) {

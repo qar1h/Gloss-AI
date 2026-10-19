@@ -264,7 +264,7 @@ it('names the level in the summary', () => {
   - `open(anchorRect, onClose, onSimpler?: () => void)`: with no `onSimpler`, the button is hidden (the "can't read this part" path). `open` always resets the title to `Explain` and clears any regenerate state.
   - `setSimplerButton(view: SimplerButtonView): void`
   - `beginRegenerate(title: string): void`: saves the current buffer and title as "previous" and greys the body (`.popup-body.stale { opacity: 0.45 }`). The next `appendChunk` clears the buffer, removes `stale`, sets the title and then appends.
-  - `failRegenerate(message: string): void`: restores the previous buffer and title, removes `stale`, and adds `<p class="popup-error">` with `textContent` = `Couldn't simplify: ${message}` below the explanation.
+  - `failRegenerate(message: string): void`: restores the previous buffer and title, removes `stale`, and adds `<p class="popup-error">` with `textContent` = `Couldn't simplify: ${message}` **above** the explanation, and scrolls the popup (not the page) to the top. (Changed after the final review: below a long explanation the line was off screen, so a failed press looked like it did nothing. Pinned by `src/content/ui/popup.test.ts`.)
   - `markDone` also drops "previous".
 
 - [ ] **Step 1: Popup.** The header becomes a title `<span>`, then the Simpler `<button type="button" class="popup-simpler">` (a small pill, muted border, `:disabled` greyed), then `×`. The button is inside the shadow host, so the existing outside-click check does not close the popup.
