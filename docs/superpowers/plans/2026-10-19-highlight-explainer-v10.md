@@ -457,6 +457,10 @@ Probed 2026-10-19 with Playwright, Chrome 155.0 (Windows), on a hand-built page 
 - **For Task 5:** WXT's `createShadowRootUi` has an `isolateEvents` option (an array of event types stopped at the shadow root). It could replace the per-textarea `stopPropagation`, but the document-level Escape listener would then no longer see Escape from inside the popup, so Escape must be handled inside. Task 5's call.
 - **For the stretch goal:** a nested explanation must read the selection with `shadowRoot.getSelection()` or `getComposedRanges`; `window.getSelection()` only ever reports it as collapsed.
 
+## Live test results
+
+- **L3 (v1 bug: popup near the bottom of the screen): PARTIAL.** The popup is still not always fully on screen. Recorded as an open item for v12 (CLAUDE.md → "v12: Popup UI improvements", with the candidate causes); not fixed in v10, by decision. Details of the observation still to be added.
+
 ## Final review (independent, whole branch, 2026-10-19)
 
 No Critical. Verdict "with fixes". The reviewer traced every sync case between what the popup shows and what `threadState` holds (failed follow-up, failed Simpler on a follow-up, Simpler after a failed follow-up, connect throws, close mid-stream and reopen) and found them consistent; the protected folders are untouched.

@@ -175,6 +175,11 @@ I chose to add features before v6. The versions below (v7–v13) are built **one
 
 ### v12: Popup UI improvements
 - After v9 and v10, because those change what the popup has to hold. Scope is set in its plan.
+- **Open item from the v10 live test (check L3, partial): the popup is still not always fully on screen.** v10's `placePopup` (`src/content/ui/placement.ts`) fixed the v1 case (a highlight near the bottom of the screen pushed the popup almost entirely off screen), but some placements still overflow. Deliberately not fixed in v10. **What was seen:** details still to be added (which edge overflowed, where the highlight was, whether a long thread made it worse). **Candidate causes, from reading the code, none verified:**
+  - **A short popup clips its own footer.** When the room on the chosen side is near `MIN_USABLE_HEIGHT` (160 px), the header (about 40 px) and the footer (note + text box, about 100 px, more once the text box grows to its 120 px maximum) leave almost no room for the thread, and the popup's `overflow: hidden` cuts off its bottom, so the text box looks off screen.
+  - **`window.innerWidth`/`innerHeight` include a page scrollbar**, so the right (or bottom) edge can sit up to about 15 px under it. `document.documentElement.clientWidth`/`clientHeight` exclude it.
+  - **Placement is computed once, at open.** A window resize, browser zoom or pinch zoom (`visualViewport`) afterwards is not followed.
+  - (Not an overflow, but related: the anchor rect is the one captured when the selection last changed, not at click time, so a chat that scrolled in between gets a popup placed for where the highlight was.)
 
 ### v13: Local model option (Ollama)
 - A second `LLMProvider` I can select on the options page, alongside Gemini. Needs: provider choice, Ollama URL, model name, a test-connection button, and clear errors for **Ollama not running**, **`OLLAMA_ORIGINS` not allowed**, and **model not pulled**.
