@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { finalizeFocal } from './focal';
+import { ORDER_OK, finalizeFocal } from './focal';
 import { RECENT_ALWAYS_MAX_TOKENS } from './limits';
 import type { PromptMessage, RawFocal } from './types';
 
@@ -21,6 +21,18 @@ const raw: RawFocal = {
   preceding: [msg('8'), msg('9', 'user'), msg('10'), msg('11', 'user')],
   precedingEndsAtGap: false,
 };
+
+describe('finalizeFocal: order status', () => {
+  it('defaults to "order trusted" for sites that do not report one (Claude)', () => {
+    expect(finalizeFocal(raw, 2).orderStatus).toEqual(ORDER_OK);
+    expect(ORDER_OK).toEqual({ retrieval: 'ok', note: null, indexGeneration: null });
+  });
+
+  it('passes a site-reported status through untouched', () => {
+    const status = { retrieval: 'disabled' as const, note: 'jumped here', indexGeneration: 'g1' };
+    expect(finalizeFocal({ ...raw, orderStatus: status }, 2).orderStatus).toBe(status);
+  });
+});
 
 describe('finalizeFocal', () => {
   it('takes the nearest N preceding messages and drops the question message from them', () => {

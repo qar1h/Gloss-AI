@@ -1,6 +1,7 @@
 // Builders for tests only. Not imported by any production module.
 
 import type { Chunk } from '../rag/types';
+import { ORDER_OK } from './focal';
 import type { FocalInput } from './types';
 
 export function makeChunk(messageId: string, chunkIndex: number, text: string, overrides: Partial<Chunk> = {}): Chunk {
@@ -34,6 +35,7 @@ export function makeFocal(overrides: Partial<FocalInput> = {}): FocalInput {
     demotedRecent: [],
     questionStatus: 'found',
     recentShortfall: null,
+    orderStatus: ORDER_OK,
     ...overrides,
   };
 }

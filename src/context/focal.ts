@@ -2,7 +2,10 @@
 
 import { RECENT_ALWAYS_MAX_TOKENS } from './limits';
 import { estimateTokens } from './tokens';
-import type { FocalInput, PromptMessage, RawFocal } from './types';
+import type { FocalInput, OrderStatus, PromptMessage, RawFocal } from './types';
+
+/** The order status of a site whose message order is fully known (Claude): nothing to say, nothing disabled. */
+export const ORDER_OK: OrderStatus = { retrieval: 'ok', note: null, indexGeneration: null };
 
 /**
  * "Recent" = the nearest `recentCount` messages immediately before the source message. The
@@ -40,5 +43,6 @@ export function finalizeFocal(raw: RawFocal, recentCount: number): FocalInput {
     recent,
     demotedRecent,
     recentShortfall,
+    orderStatus: raw.orderStatus ?? ORDER_OK,
   };
 }

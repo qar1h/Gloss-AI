@@ -5,9 +5,9 @@ import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 import { onSelectionChange, type SelectionInfo } from './ui/selection';
 import { createExplainButton } from './ui/explainButton';
 import { createPopup } from './ui/popup';
-import { readRawFocal } from './readFocal';
+import { readRawFocal, whyNotExplainable } from './readFocal';
 import { initPromptDebug, printPrepared, recordPrepared } from './promptDebug';
-import { claudeAdapter } from '@/sites/claude';
+import { getAdapter, requireAdapter } from '@/sites';
 import { initIndexer } from '@/rag/indexer';
 import { getSettings } from '@/options/storage';
 import { finalizeFocal } from '@/context/focal';
@@ -21,6 +21,7 @@ import {
 } from '@/messaging/types';
 
 export async function initHighlightExplainer(ctx: ContentScriptContext): Promise<void> {
+  if (!getAdapter()) return; // a page we have no adapter for: do nothing at all
   ctx.onInvalidated(initIndexer());
   initPromptDebug();
 
@@ -47,7 +48,15 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
 
     // Read the page first and synchronously, while the selection is still live.
     const raw = readRawFocal(selection.range, selection.text);
-    if (!raw) return; // selection wasn't inside a recognized chat message
+    if (!raw) {
+      // Not inside a message we can read. Say why, if the site can: a click must not end in silence.
+      const why = whyNotExplainable(selection.range);
+      if (why) {
+        popup.open(selection.rect, () => undefined);
+        popup.showError(why);
+      }
+      return;
+    }
 
     const state: { closed: boolean; port: Browser.runtime.Port | null } = { closed: false, port: null };
     popup.open(selection.rect, () => {
@@ -58,7 +67,7 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
     try {
       const settings = await getSettings();
       const focal = finalizeFocal(raw, resolveRecentCount(settings.recentMessageCount));
-      const prepared = await prepareExplainPrompt(claudeAdapter.getConversationId(), focal, settings);
+      const prepared = await prepareExplainPrompt(requireAdapter().getConversationId(), focal, settings);
       if (state.closed) return; // popup was closed while retrieval ran — send nothing
 
       recordPrepared(prepared);

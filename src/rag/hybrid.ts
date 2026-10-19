@@ -4,7 +4,7 @@
 
 import { rankByBm25, type Bm25Result, type Bm25TermCache } from './bm25';
 import { reciprocalRankFusion, RRF_DEPTH, type FusedChunk } from './fusion';
-import { rankChunks, type ScoredChunk } from './search';
+import { rankChunks, usableVectors, type ScoredChunk } from './search';
 import { getAllChunks, getAllEmbeddings } from './store';
 import { tokenizeQuery } from './tokenize';
 import type { Chunk, EmbeddingRecord } from './types';
@@ -44,7 +44,7 @@ export function hybridRank(
   const embeddingList = embeddingProbe.slice(0, depth);
   const bm25List = bm25Probe.slice(0, depth);
 
-  const doneChunkIds = new Set(embeddings.filter((e) => e.status === 'done').map((e) => e.chunkId));
+  const usable = usableVectors(chunks, embeddings);
 
   return {
     queryTerms: tokenizeQuery(bm25QueryText),
@@ -53,7 +53,7 @@ export function hybridRank(
     fused: reciprocalRankFusion(embeddingList, bm25List, depth),
     matchedTermsByChunkId: new Map(bm25List.map((r) => [r.chunk.id, r.matchedTerms] as const)),
     chunkCount: chunks.length,
-    embeddedCount: chunks.filter((c) => doneChunkIds.has(c.id)).length,
+    embeddedCount: chunks.filter((c) => usable.has(c.id)).length,
     capBinding: { embedding: embeddingProbe.length > depth, bm25: bm25Probe.length > depth },
   };
 }

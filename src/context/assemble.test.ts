@@ -102,6 +102,16 @@ describe('assemblePrompt — retrieval mode', () => {
   it('surfaces a retrieval note in the report', () => {
     const r = retrieve([], OPTS, makeFocal(), { retrievalNote: 'query embedding unavailable (timed out)' });
     expect(r.report.retrievalNote).toBe('query embedding unavailable (timed out)');
+    expect(r.report.orderNote).toBeNull(); // a normal site says nothing about order
+  });
+
+  it('carries a site order note into the report and warns about it, without changing the prompt', () => {
+    const plain = retrieve([], OPTS, makeFocal());
+    const status = { retrieval: 'ok' as const, note: 'chat order changed unexpectedly earlier on this page', indexGeneration: 'g2' };
+    const noted = retrieve([], OPTS, makeFocal({ orderStatus: status }));
+    expect(noted.report.orderNote).toBe(status.note);
+    expect(noted.report.warnings.some((w) => w.includes(status.note))).toBe(true);
+    expect(noted.prompt).toBe(plain.prompt); // the note is for the user; Gemini's prompt is untouched
   });
 
   it('records what was excluded before ranking', () => {

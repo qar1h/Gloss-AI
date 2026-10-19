@@ -23,6 +23,21 @@ export interface ScoredChunk {
   score: number;
 }
 
+/**
+ * The vectors that really describe their chunk: status 'done' AND computed for the text the chunk
+ * holds now. A chunk id is `<chat>:<position>:<index>`, so after a re-index, an edit, or a wipe
+ * the same id can belong to different text; its old vector would then match the chunk on words it
+ * no longer contains, and nothing would say so.
+ */
+export function usableVectors(chunks: Chunk[], embeddings: EmbeddingRecord[]): Map<string, number[]> {
+  const textHashById = new Map(chunks.map((c) => [c.id, c.textHash] as const));
+  const usable = new Map<string, number[]>();
+  for (const e of embeddings) {
+    if (e.status === 'done' && textHashById.get(e.chunkId) === e.chunkTextHash) usable.set(e.chunkId, e.vector);
+  }
+  return usable;
+}
+
 /** Pure ranking over already-fetched data — no IndexedDB here, so this is unit-testable. */
 export function rankChunks(
   chunks: Chunk[],
@@ -30,9 +45,7 @@ export function rankChunks(
   queryVector: number[],
   k: number,
 ): ScoredChunk[] {
-  const vectorByChunkId = new Map(
-    embeddings.filter((e) => e.status === 'done').map((e) => [e.chunkId, e.vector] as const),
-  );
+  const vectorByChunkId = usableVectors(chunks, embeddings);
 
   const scored: ScoredChunk[] = [];
   for (const chunk of chunks) {

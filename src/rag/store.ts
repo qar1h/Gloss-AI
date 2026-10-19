@@ -9,6 +9,7 @@
 // filter in memory rather than building compound-key range queries.
 
 import type { Chunk, EmbeddingRecord, MessageRecord } from './types';
+import { prefixRangeEnd } from './namespace';
 
 const DB_NAME = 'highlight-explainer';
 const DB_VERSION = 2;
@@ -51,7 +52,7 @@ function openDb(): Promise<IDBDatabase> {
         dbPromise = null; // let a later call try again once the other tab is gone
         reject(
           new Error(
-            'IndexedDB upgrade blocked by another open tab — close other claude.ai tabs and reload.',
+            'IndexedDB upgrade blocked by another open tab — close other tabs of this chat site and reload.',
           ),
         );
       };
@@ -100,6 +101,14 @@ export async function getAllMessageRecords(conversationId: string): Promise<Mess
   const db = await openDb();
   const tx = db.transaction(MESSAGES_STORE, 'readonly');
   return promisifyRequest(tx.objectStore(MESSAGES_STORE).index('by_conversation').getAll(conversationId));
+}
+
+/** Message records of every conversation whose id starts with `prefix` (see namespace.ts). */
+export async function getMessageRecordsByPrefix(prefix: string): Promise<MessageRecord[]> {
+  const db = await openDb();
+  const tx = db.transaction(MESSAGES_STORE, 'readonly');
+  const range = IDBKeyRange.bound(prefix, prefixRangeEnd(prefix), false, true);
+  return promisifyRequest(tx.objectStore(MESSAGES_STORE).index('by_conversation').getAll(range));
 }
 
 export async function getAllChunks(conversationId: string): Promise<Chunk[]> {

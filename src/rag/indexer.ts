@@ -1,7 +1,10 @@
-import { claudeAdapter, getTranscriptFeed } from '@/sites/claude';
+import { requireAdapter } from '@/sites';
+import type { SiteMessage } from '@/sites/types';
 import { getSettings, type Settings } from '@/options/storage';
 import { chunkMessage, CHUNKER_VERSION } from './chunker';
 import { hashText } from './hash';
+import { positionFromId } from './positionId';
+import { ensureIndexGeneration, onIndexWiped } from './generation';
 import { embedTexts, EMBEDDING_VERSION } from './embedder';
 import { buildEmbedInputForChunk, buildSearchQueryText } from './query';
 import { searchChunks } from './search';
@@ -71,23 +74,56 @@ function startIndexPass(): void {
     });
 }
 
-async function runIndexPass(): Promise<void> {
-  const conversationId = claudeAdapter.getConversationId();
-  if (!conversationId) return;
-
+/** One indexing pass. Exported only so tests can drive it; in the extension it runs from the debounced observer. */
+export async function runIndexPass(): Promise<void> {
   const settings = await getSettings();
 
+  // Everything about the page is read here, in one tick, after the last await so far: which chat
+  // this is, its messages, and which numbering they carry. Read the chat before an await and the
+  // messages after it, and a navigation in between files one chat's messages under another's id.
+  // (Reading the page can renumber a site whose positions are session-scoped, so the generation
+  // is asked for after the messages.) Rows written under another numbering are wiped before we
+  // write under this one (see generationGate.ts).
+  const adapter = requireAdapter();
+  const conversationId = adapter.getConversationId();
+  if (!conversationId) return;
+
   if (settings.debugEnabled) {
-    const unrecognized = claudeAdapter.getUnrecognizedRowIds();
+    const unrecognized = adapter.getUnrecognizedRowIds();
     if (unrecognized.length > 0) {
       console.log('[highlight-explainer] rows with no recognized role/id (never indexed):', unrecognized);
     }
   }
 
-  for (const message of claudeAdapter.getAllMessages()) {
-    const key = `${conversationId}:${message.id}`;
+  const messages = adapter.getAllMessages();
+  const generation = adapter.getIndexGeneration?.() ?? null;
+  await ensureIndexGeneration(conversationId, generation);
+  const renumbered = () => (adapter.getIndexGeneration?.() ?? null) !== generation;
+  // A virtualized list can hand an element to another turn while this pass awaits (see SiteAdapter).
+  const stillThere = (message: SiteMessage) => adapter.isMessageCurrent?.(message) ?? true;
 
-    if (claudeAdapter.isStreaming(message.element)) {
+  const warnedBadIds = new Set<string>();
+  for (const message of messages) {
+    // The numbering changed while this pass was running: what we hold is numbered under the old
+    // one, and writing it now would mix two numberings. Drop the pass; a fresh one is queued.
+    if (renumbered()) {
+      scheduleIndexPass();
+      return;
+    }
+    // The id must be a position (see positionId.ts). A uuid here would write NaN positions and
+    // scramble chat order without any error, so refuse it, loudly, once per pass.
+    const position = positionFromId(message.id);
+    if (position === null) {
+      if (!warnedBadIds.has(message.id)) {
+        warnedBadIds.add(message.id);
+        console.warn(`[highlight-explainer] not indexing a message whose id is not a position: ${JSON.stringify(message.id)}`);
+      }
+      continue;
+    }
+    const key = `${conversationId}:${message.id}`;
+    if (!stillThere(message)) continue;
+
+    if (requireAdapter().isStreaming(message.element)) {
       const firstSeen = streamingSince.get(key);
       if (firstSeen === undefined) {
         streamingSince.set(key, Date.now());
@@ -104,7 +140,7 @@ async function runIndexPass(): Promise<void> {
       streamingSince.delete(key);
     }
 
-    const flatText = claudeAdapter.getMessageText(message.element);
+    const flatText = requireAdapter().getMessageText(message.element);
     const textHash = await hashText(flatText);
     const existing = await getMessageRecord(key);
 
@@ -113,14 +149,15 @@ async function runIndexPass(): Promise<void> {
       existing.textHash === textHash &&
       existing.chunkerVersion === CHUNKER_VERSION;
     if (unchanged) continue;
+    if (!stillThere(message)) continue; // the awaits above are long enough for the element to be reused
 
-    const blocks = claudeAdapter.getMessageBlocks(message.element);
+    const blocks = requireAdapter().getMessageBlocks(message.element);
     const chunks = await chunkMessage(conversationId, message.id, message.role, blocks);
     const record: MessageRecord = {
       key,
       conversationId,
       messageId: message.id,
-      position: Number(message.id),
+      position,
       role: message.role,
       textHash,
       chunkerVersion: CHUNKER_VERSION,
@@ -128,6 +165,20 @@ async function runIndexPass(): Promise<void> {
       lastIndexedAt: Date.now(),
     };
     const previousChunkIds = existing?.chunkIds ?? [];
+    if (renumbered()) {
+      scheduleIndexPass();
+      return;
+    }
+    if (!stillThere(message)) continue;
+    // No record means whatever this tab remembers about these chunk ids is stale: another tab (or a
+    // wipe) deleted the rows, and a cached "already embedded" would keep the new chunks from ever
+    // getting a vector. (The first version of the two-tab fix caused exactly this.)
+    if (existing === undefined) {
+      forgetEmbeddingStatuses(
+        conversationId,
+        chunks.map((c) => c.id),
+      );
+    }
     await replaceMessage(record, chunks, previousChunkIds);
     // replaceMessage drops the embedding rows of chunk ids this message no longer has —
     // drop them from the status cache too, so it stays a true picture of the store.
@@ -156,7 +207,7 @@ async function runIndexPass(): Promise<void> {
  * deleting real history that just isn't mounted at the moment.
  */
 async function cleanupStaleTail(conversationId: string): Promise<void> {
-  const lastPosition = claudeAdapter.getLastMessagePosition();
+  const lastPosition = requireAdapter().getLastMessagePosition();
   if (lastPosition === null) return;
 
   const records = await getAllMessageRecords(conversationId);
@@ -186,6 +237,14 @@ type EmbeddingStatus = Pick<
 // fresh read rather than starting out silently stale.
 let statusCacheConversationId: string | null = null;
 let statusCache = new Map<string, EmbeddingStatus>();
+
+// A wipe (generationGate) deletes the embedding rows this cache describes.
+onIndexWiped((conversationId) => {
+  if (statusCacheConversationId === conversationId) {
+    statusCache = new Map();
+    statusCacheConversationId = null;
+  }
+});
 
 function toEmbeddingStatus(record: EmbeddingRecord): EmbeddingStatus {
   return {
@@ -396,8 +455,8 @@ async function dumpHybrid(conversationId: string, text?: string, k?: number, dep
     }
     const range = selection.getRangeAt(0);
     highlight = selection.toString().trim();
-    paragraph = claudeAdapter.getParagraphAround(range);
-    const message = claudeAdapter.getMessageForNode(range.commonAncestorContainer);
+    paragraph = requireAdapter().getParagraphAround(range);
+    const message = requireAdapter().getMessageForNode(range.commonAncestorContainer);
     ownMessageIds = new Set(message ? [message.id] : []);
   }
 
@@ -426,12 +485,13 @@ export function initIndexer(): () => void {
   const feedObserver = new MutationObserver(() => scheduleIndexPass());
 
   const attachToFeed = () => {
-    const feed = getTranscriptFeed();
+    const adapter = requireAdapter();
+    const feed = adapter.getTranscriptRoot();
     if (feed && feed !== observedFeed) {
       feedObserver.disconnect();
       feedObserver.observe(feed, {
         attributes: true,
-        attributeFilter: ['data-perf-row-streaming', 'data-last-message'],
+        attributeFilter: adapter.observedAttributes,
         childList: true,
         subtree: true,
         characterData: true,
@@ -441,7 +501,7 @@ export function initIndexer(): () => void {
     }
   };
 
-  let lastConversationId = claudeAdapter.getConversationId();
+  let lastConversationId = requireAdapter().getConversationId();
   attachToFeed();
   scheduleIndexPass();
 
@@ -449,7 +509,7 @@ export function initIndexer(): () => void {
   // without a full page reload, and there's no reliable DOM event for that, so
   // a cheap poll is the pragmatic choice here over hooking history/pushState.
   const navigationPoll = setInterval(() => {
-    const id = claudeAdapter.getConversationId();
+    const id = requireAdapter().getConversationId();
     if (id !== lastConversationId) {
       lastConversationId = id;
       scheduleIndexPass();
@@ -457,8 +517,18 @@ export function initIndexer(): () => void {
     attachToFeed(); // also covers the feed element itself being remounted
   }, NAVIGATION_POLL_MS);
 
+  // The console helpers read the index too, so they go through the same gate as everything else:
+  // between a renumbering and the next pass they would otherwise print rows from the old numbering.
+  const readableConversation = async (): Promise<string | null> => {
+    const adapter = requireAdapter();
+    const id = adapter.getConversationId();
+    if (!id) return null;
+    await ensureIndexGeneration(id, adapter.getIndexGeneration?.() ?? null);
+    return id;
+  };
+
   (window as unknown as { __glossDumpChunks?: () => Promise<void> }).__glossDumpChunks = async () => {
-    const id = claudeAdapter.getConversationId();
+    const id = await readableConversation();
     if (id) await dumpChunks(id);
   };
 
@@ -466,7 +536,7 @@ export function initIndexer(): () => void {
     text: string,
     k?: number,
   ) => {
-    const id = claudeAdapter.getConversationId();
+    const id = await readableConversation();
     if (!id) return;
     const settings: Settings = await getSettings();
     await dumpSearch(id, text, k ?? settings.retrievalK);
@@ -474,14 +544,14 @@ export function initIndexer(): () => void {
 
   (window as unknown as { __glossHybrid?: (text?: string, k?: number, depth?: number) => Promise<void> }).__glossHybrid =
     async (text?: string, k?: number, depth?: number) => {
-      const id = claudeAdapter.getConversationId();
+      const id = await readableConversation();
       if (!id) return;
       await dumpHybrid(id, text, k, depth);
     };
 
   (window as unknown as { __glossResetFailedEmbeddings?: () => Promise<void> }).__glossResetFailedEmbeddings =
     async () => {
-      const id = claudeAdapter.getConversationId();
+      const id = await readableConversation();
       if (!id) return;
       const count = await resetFailedEmbeddings(id);
       console.log(`[highlight-explainer] cleared ${count} failed embedding(s) — re-indexing now.`);

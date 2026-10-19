@@ -5,7 +5,7 @@ import type { Chunk } from '../rag/types';
 export type Role = 'user' | 'assistant';
 
 export interface PromptMessage {
-  /** The site's own row index (claude.ai `data-index`), as a string. */
+  /** The message's position as a decimal integer string (Claude's `data-index`, or a ChatGPT frame position; see SiteMessage.id). */
   id: string;
   role: Role;
   text: string;
@@ -25,6 +25,23 @@ export type QuestionStatus = 'found' | 'not-applicable' | 'not-loaded' | 'none';
 /** QuestionStatus plus the assembly-time case of a question message with no readable text. */
 export type QuestionState = QuestionStatus | 'empty';
 
+/**
+ * How far the message order on this page can be trusted, set by site adapters whose order is only
+ * partly known (ChatGPT). Sites with a real index (Claude) never set it.
+ */
+export interface OrderStatus {
+  /**
+   * 'disabled': the ids on this page are not comparable with the indexed ones (the window is
+   * detached from what was indexed), so the index must not be searched. The always-include
+   * material is still sent.
+   */
+  retrieval: 'ok' | 'disabled';
+  /** A plain sentence for the popup and the debug report, or null. A caveat about what the page gave us: the message order, or content that was only partly on the page. */
+  note: string | null;
+  /** The numbering the ids were assigned under; the stored index is wiped if it was written under another. */
+  indexGeneration: string | null;
+}
+
 /** What the DOM gives us for one highlight, before the recent-message setting is applied. */
 export interface RawFocal {
   highlight: string;
@@ -36,6 +53,8 @@ export interface RawFocal {
   preceding: PromptMessage[];
   /** The walk back stopped at a gap in the page, not at the start of the chat, with fewer than MAX_RECENT_COUNT found. */
   precedingEndsAtGap: boolean;
+  /** Absent on sites whose order is fully known. */
+  orderStatus?: OrderStatus;
 }
 
 /** The always-include material for one explain request. */
@@ -51,6 +70,7 @@ export interface FocalInput {
   demotedRecent: { id: string; estTokens: number }[];
   /** Set only when the page has a gap and fewer nearby messages were found than asked for. */
   recentShortfall: { wanted: number; found: number } | null;
+  orderStatus: OrderStatus;
 }
 
 /** One entry of the fused retrieval ranking. */
@@ -110,6 +130,8 @@ export interface PromptReport {
   demotedRecent: { id: string; estTokens: number }[];
   questionState: QuestionState;
   recentShortfall: { wanted: number; found: number } | null;
+  /** A site-supplied caveat (see OrderStatus: message order, or content only partly on the page), shown first in the popup. */
+  orderNote: string | null;
 }
 
 export interface AssembledPrompt {

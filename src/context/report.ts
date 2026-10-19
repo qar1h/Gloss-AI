@@ -5,7 +5,11 @@ import type { Coverage, PromptReport } from './types';
 export function summaryLines(report: PromptReport): string[] {
   const lines: string[] = [
     `mode: ${report.mode} — ${report.modeReason}`,
-    `prompt: ≈${report.totalEstTokens} est. tokens of ${report.budgetTokens} budget (always-include ≈${report.fixedEstTokens}); excerpts ${report.excerptCount} of max ${report.maxChunks}`,
+    `prompt: ≈${report.totalEstTokens} est. tokens of ${report.budgetTokens} budget (always-include ≈${report.fixedEstTokens}); ${
+      report.mode === 'full'
+        ? `excerpts ${report.excerptCount} (full-chat mode sends all of them; the max of ${report.maxChunks} applies to retrieval only)`
+        : `excerpts ${report.excerptCount} of max ${report.maxChunks}`
+    }`,
   ];
   if (report.excludedMessageIds.length > 0) {
     lines.push(
@@ -75,6 +79,9 @@ export function describeCoveragePopup(report: PromptReport, coverage: Coverage):
   } else {
     parts.push(`${coverage.indexedMessages} messages indexed`);
   }
+
+  // A site's caveat about what the page gave us (message order, code only partly on the page) goes first: it is the one thing the user must not miss.
+  if (report.orderNote) parts.unshift(report.orderNote);
 
   const text = parts.join(' · ');
   return text.charAt(0).toUpperCase() + text.slice(1);

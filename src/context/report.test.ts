@@ -36,6 +36,7 @@ function makeReport(overrides: Partial<PromptReport> = {}): PromptReport {
     demotedRecent: [],
     questionState: 'found',
     recentShortfall: null,
+    orderNote: null,
     ...overrides,
   };
 }
@@ -50,6 +51,14 @@ describe('summaryLines', () => {
     expect(lines).toContain('3 of max 8');
     expect(lines).toContain('9 chunks');
     expect(lines).toContain('12, 11, 10');
+  });
+
+  it('does not show the retrieval cap as a limit in full-chat mode, where everything is sent', () => {
+    const lines = summaryLines(makeReport({ mode: 'full', modeReason: 'the whole indexed chat fits', excerptCount: 10, maxChunks: 8 })).join('\n');
+    expect(lines).not.toContain('of max'); // "10 of max 8" read like a bug; the cap only applies to retrieval
+    expect(lines).toContain('excerpts 10');
+    expect(lines).toContain('full-chat mode');
+    expect(lines).toContain('applies to retrieval only');
   });
 
   it('says which recent messages were too big to always include and were left to retrieval', () => {
@@ -138,6 +147,26 @@ describe('describeCoveragePopup', () => {
     const report = makeReport({ mode: 'full', excerptCount: 0, excludedMessageIds: ['1', '0'] });
     expect(describeCoveragePopup(report, { indexedMessages: 0, totalMessages: 2 })).toBe(
       'Whole indexed chat included · 0 of ~2 messages indexed',
+    );
+  });
+
+  it('puts a site order note first, so it cannot be missed', () => {
+    const text = describeCoveragePopup(
+      makeReport({ orderNote: 'chat order changed unexpectedly earlier on this page, so the index was rebuilt' }),
+      { indexedMessages: 6, totalMessages: null },
+    );
+    expect(text).toBe(
+      'Chat order changed unexpectedly earlier on this page, so the index was rebuilt · 3 excerpts from elsewhere in the chat · 6 messages indexed',
+    );
+  });
+
+  it('keeps the order note alongside a retrieval-unavailable message', () => {
+    const text = describeCoveragePopup(
+      makeReport({ excerptCount: 0, retrievalNote: 'jumped here', orderNote: "this part of the chat isn't connected to the indexed part" }),
+      { indexedMessages: 6, totalMessages: null },
+    );
+    expect(text).toBe(
+      "This part of the chat isn't connected to the indexed part · retrieval unavailable, nearby messages only · 6 messages indexed",
     );
   });
 

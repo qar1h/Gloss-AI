@@ -4,14 +4,14 @@
 // With the debug toggle on, every real click also prints this report. Everything goes to the
 // console only — prompts contain real chat text and are never written anywhere.
 
-import { claudeAdapter } from '@/sites/claude';
+import { requireAdapter } from '@/sites';
 import { getSettings } from '@/options/storage';
 import { finalizeFocal } from '@/context/focal';
 import { prepareExplainPrompt, type DebugOverride, type PreparedExplain } from '@/context/gather';
 import { resolveRecentCount } from '@/context/limits';
 import { candidateTable, describeCoverageForConsole, sectionTable, summaryLines } from '@/context/report';
 import type { RawFocal } from '@/context/types';
-import { rawFocalForMessage, readRawFocal } from './readFocal';
+import { rawFocalForMessage, readRawFocal, whyNotExplainable } from './readFocal';
 
 const TAG = '[highlight-explainer]';
 
@@ -52,11 +52,13 @@ async function dryRun(textOrOptions?: string | PromptDebugOptions, maybeOptions?
   const selection = window.getSelection();
   if (text !== undefined) {
     // Typed text: use the first mounted message that contains it as the source message.
-    const message = claudeAdapter
+    const message = requireAdapter()
       .getAllMessages()
-      .find((m) => claudeAdapter.getMessageText(m.element).includes(text));
+      .find((m) => requireAdapter().getMessageText(m.element).includes(text));
     if (!message) {
-      console.warn(`${TAG} no message currently on the page contains that text.`);
+      console.warn(
+        `${TAG} no indexed message currently on the page contains that text. (On ChatGPT, a window you jumped to with the scrollbar is not indexed: select the text with the mouse instead of typing it.)`,
+      );
       return;
     }
     raw = rawFocalForMessage(message, text, text);
@@ -67,7 +69,7 @@ async function dryRun(textOrOptions?: string | PromptDebugOptions, maybeOptions?
     return;
   }
   if (!raw) {
-    console.warn(`${TAG} the selection is not inside a recognized chat message.`);
+    console.warn(`${TAG} ${(selection && selection.rangeCount > 0 && whyNotExplainable(selection.getRangeAt(0))) || 'the selection is not inside a recognized chat message.'}`);
     return;
   }
 
@@ -79,7 +81,7 @@ async function dryRun(textOrOptions?: string | PromptDebugOptions, maybeOptions?
     thresholdTokens: options.threshold,
     maxChunks: options.k,
   };
-  const prepared = await prepareExplainPrompt(claudeAdapter.getConversationId(), focal, settings, override);
+  const prepared = await prepareExplainPrompt(requireAdapter().getConversationId(), focal, settings, override);
   printPrepared(prepared, 'dry run — this is what an Explain click would send (nothing was sent):');
 }
 
