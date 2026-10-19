@@ -459,6 +459,8 @@ Probed 2026-10-19 with Playwright, Chrome 155.0 (Windows), on a hand-built page 
 
 ## Live test results
 
+Run by the user on claude.ai and ChatGPT, 2026-10-19, as T1–T14 (their numbering). All passed except T3 (partial). Full results in CLAUDE.md, "v10 live checklist". **Correction:** T9 was reported as "count reported in the prompt and the popup note", but the popup never shows the count (Decision 3 asked for it; not built, missed by both reviews); it is in the prompt and the console report only. Open item.
+
 - **L3 (v1 bug: popup near the bottom of the screen): PARTIAL.** The popup is still not always fully on screen. Recorded as an open item for v12 (CLAUDE.md → "v12: Popup UI improvements", with the candidate causes); not fixed in v10, by decision. Details of the observation still to be added.
 
 ## Final review (independent, whole branch, 2026-10-19)
