@@ -169,6 +169,13 @@ export function simplerButtonView(state: ThreadState): SimplerButtonView {
   }
 }
 
+/** What a call is, for the debug report's label ("prompt sent to Gemini{this}:"). */
+export function describeSend(send: ThreadSend): string {
+  const level = `level ${send.level} of ${MAX_SIMPLICITY_LEVEL}`;
+  if (send.kind === 'explanation') return send.level === 0 ? '' : ` (Simpler, ${level})`;
+  return ` (follow-up ${send.followUpNumber}, ${send.regenerate ? 'Simpler, ' : ''}${level})`;
+}
+
 /** The text box can be typed in while an answer streams; only sending waits. */
 export function composerView(state: ThreadState): ComposerView {
   if (state.phase === 'unavailable') return { visible: false, canSend: false };

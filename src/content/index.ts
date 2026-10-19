@@ -1,8 +1,10 @@
 // Wires together selection, the Explain button, the popup, the site adapter, retrieval and
 // prompt assembly, and the calls to the background worker (one Port per call, explainCall.ts:
 // every call ends, even if the background drops the connection). A "Simpler" press (v9)
-// re-sends the prompt prepared at click time with a simpler instruction: nothing is re-read
-// from the page or the index, and the popup's context note is left as it is.
+// re-sends the prompt prepared at click time with a simpler instruction, and a follow-up question
+// (v10) sends that same prompt plus the thread (context/thread.ts): nothing is re-read from the
+// page or the index, retrieval does not re-run, and the popup's context note is left as it is.
+// What the thread holds, and which answer Simpler rewrites, is decided by threadState.ts.
 
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 import { isInsideHosts, onSelectionChange, type SelectionInfo } from './ui/selection';
@@ -15,11 +17,20 @@ import { initIndexer } from '@/rag/indexer';
 import { getSettings } from '@/options/storage';
 import { finalizeFocal } from '@/context/focal';
 import { prepareExplainPrompt } from '@/context/gather';
-import { MAX_SIMPLICITY_LEVEL, SIMPLICITY_LEVELS } from '@/context/levels';
+import { SIMPLICITY_LEVELS } from '@/context/levels';
 import { resolveRecentCount } from '@/context/limits';
 import { describeCoveragePopup } from '@/context/report';
 import { promptAtLevel } from '@/context/simplicity';
-import { initialThreadState, simplerButtonView, threadReduce, type ThreadEvent, type ThreadSend } from './threadState';
+import { followUpPrompt } from '@/context/thread';
+import {
+  composerView,
+  describeSend,
+  initialThreadState,
+  simplerButtonView,
+  threadReduce,
+  type ThreadEvent,
+  type ThreadSend,
+} from './threadState';
 import { EXPLAIN_PORT_NAME } from '@/messaging/types';
 import { startExplainCall, type CallPort, type ExplainCall } from './explainCall';
 
@@ -81,18 +92,25 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
     // One thread state per popup; startRequest is set once the prompt is prepared.
     let thread = initialThreadState();
     let startRequest: ((send: ThreadSend) => void) | null = null;
+    // How a failed call shows itself depends on what it was.
+    const showFailure = (send: ThreadSend, message: string): void => {
+      if (send.kind === 'follow-up' && !send.regenerate) popup.failFollowUp(message, send.input.question);
+      else if (send.kind === 'explanation' && send.level === 0) popup.showError(message);
+      else popup.failRegenerate(message);
+    };
     const dispatch = (event: ThreadEvent): void => {
       if (state.closed) return;
       const result = threadReduce(thread, event);
       thread = result.state;
       popup.setSimplerButton(simplerButtonView(thread));
+      popup.setComposer(composerView(thread));
       const send = result.send;
       if (!send || !startRequest) return;
       try {
         startRequest(send);
       } catch (error) {
         // e.g. the extension was reloaded under this tab: connect() throws, and the press must not hang.
-        popup.failRegenerate(error instanceof Error ? error.message : String(error));
+        showFailure(send, error instanceof Error ? error.message : String(error));
         dispatch({ type: 'error', request: send.request });
       }
     };
@@ -103,8 +121,10 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
         state.call?.cancel();
       },
       onSimpler: () => dispatch({ type: 'press' }),
+      onAsk: (question) => dispatch({ type: 'ask', question }),
     });
     popup.setSimplerButton(simplerButtonView(thread));
+    popup.setComposer(composerView(thread));
 
     try {
       const settings = await getSettings();
@@ -115,30 +135,28 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
       popup.setContextNote(describeCoveragePopup(prepared.assembled.report, prepared.coverage));
 
       startRequest = (send) => {
-        if (send.kind !== 'explanation') return; // follow-ups are wired up in v10 Task 6
-        const { level, request } = send;
-        // Always built from the level-0 prompt of this click, never from the text on screen.
-        const sent = { ...prepared, assembled: promptAtLevel(prepared.assembled, level) };
+        // Always built from the level-0 prompt of this click, never from the page or the index again.
+        const assembled =
+          send.kind === 'explanation'
+            ? promptAtLevel(prepared.assembled, send.level)
+            : followUpPrompt(prepared.assembled, send.input, send.level);
+        const sent = { ...prepared, assembled };
         recordPrepared(sent);
-        if (settings.debugEnabled) {
-          printPrepared(
-            sent,
-            level === 0 ? 'prompt sent to Gemini:' : `prompt sent to Gemini (Simpler, level ${level} of ${MAX_SIMPLICITY_LEVEL}):`,
-          );
-        }
-        if (level > 0) popup.beginRegenerate(SIMPLICITY_LEVELS[level]!.label);
+        if (settings.debugEnabled) printPrepared(sent, `prompt sent to Gemini${describeSend(send)}:`);
+
+        if (send.kind === 'follow-up' && !send.regenerate) popup.beginFollowUp(send.input.question);
+        else if (send.level > 0) popup.beginRegenerate(SIMPLICITY_LEVELS[send.level]!.label);
 
         state.call?.cancel(); // the previous call has finished; nothing more may arrive from it
-        state.call = startExplainCall(connectExplainPort, sent.assembled.prompt, {
+        state.call = startExplainCall(connectExplainPort, assembled.prompt, {
           onChunk: (text) => popup.appendChunk(text),
           onDone: (text) => {
             popup.markDone();
-            dispatch({ type: 'done', request, text });
+            dispatch({ type: 'done', request: send.request, text });
           },
           onError: (message) => {
-            if (level === 0) popup.showError(message);
-            else popup.failRegenerate(message);
-            dispatch({ type: 'error', request });
+            showFailure(send, message);
+            dispatch({ type: 'error', request: send.request });
           },
         });
       };

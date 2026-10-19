@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   composerView,
+  describeSend,
   initialThreadState,
   simplerButtonView,
   threadReduce,
@@ -221,6 +222,20 @@ describe('threadReduce — follow-ups', () => {
     const { state } = run([done(0, 'EXPL'), ask('q1'), error(1), ask('q2'), done(1, 'late')]);
     expect(state.phase).toBe('asking');
     expect(state.turns).toEqual([{ question: null, answer: 'EXPL' }]);
+  });
+});
+
+describe('describeSend', () => {
+  it('labels each kind of call for the debug report', () => {
+    expect(describeSend({ kind: 'explanation', level: 0, request: 0 })).toBe('');
+    expect(describeSend({ kind: 'explanation', level: 2, request: 2 })).toBe(' (Simpler, level 2 of 3)');
+    const input = { explanation: 'e', exchanges: [], question: 'q' };
+    expect(describeSend({ kind: 'follow-up', regenerate: false, level: 1, request: 3, followUpNumber: 2, input })).toBe(
+      ' (follow-up 2, level 1 of 3)',
+    );
+    expect(describeSend({ kind: 'follow-up', regenerate: true, level: 3, request: 4, followUpNumber: 2, input })).toBe(
+      ' (follow-up 2, Simpler, level 3 of 3)',
+    );
   });
 });
 
