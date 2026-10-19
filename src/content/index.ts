@@ -71,7 +71,7 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
       // Not inside a message we can read. Say why, if the site can: a click must not end in silence.
       const why = whyNotExplainable(selection.range);
       if (why) {
-        popup.open(selection.rect, () => undefined);
+        popup.open(selection.rect, { onClose: () => undefined });
         popup.showError(why);
       }
       return;
@@ -97,14 +97,13 @@ export async function initHighlightExplainer(ctx: ContentScriptContext): Promise
       }
     };
 
-    popup.open(
-      selection.rect,
-      () => {
+    popup.open(selection.rect, {
+      onClose: () => {
         state.closed = true;
         state.call?.cancel();
       },
-      () => dispatch({ type: 'press' }),
-    );
+      onSimpler: () => dispatch({ type: 'press' }),
+    });
     popup.setSimplerButton(simplerButtonView(thread));
 
     try {
